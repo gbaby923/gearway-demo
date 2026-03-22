@@ -166,7 +166,7 @@ Once you have all required info (name, phone, vehicle, service) and have asked a
   "email": "...",
   "vehicle": "YEAR MAKE MODEL (Xk miles)",
   "service": "...",
-  "preferred_time": "morning / afternoon / specific day note",
+  "preferred_time": "e.g. Tuesday at 2pm / Wednesday morning / any afternoon",
   "notes": "..."
 }
 \`\`\`
@@ -212,6 +212,47 @@ function laToUTC(dateStr, hour) {
   return new Date(ref.getTime() + offsetMs);
 }
 
+// ─── Calendar: parse preferred time string ────────────────────────────────────
+function parsePreferredTime(str) {
+  if (!str) return {};
+  const s = str.toLowerCase();
+  const result = {};
+
+  const weekdays = ['monday','tuesday','wednesday','thursday','friday','saturday'];
+  for (const d of weekdays) {
+    if (s.includes(d)) { result.weekday = d; break; }
+  }
+
+  const hourMatch = s.match(/\b(\d{1,2})(?::\d{2})?\s*(am|pm)/);
+  if (hourMatch) {
+    let h = parseInt(hourMatch[1]);
+    if (hourMatch[2] === 'pm' && h < 12) h += 12;
+    if (hourMatch[2] === 'am' && h === 12) h = 0;
+    if (h >= 8 && h <= 17) result.hour = h;
+  }
+
+  if (result.hour === undefined) {
+    if (s.includes('morning')) result.period = 'morning';
+    else if (s.includes('afternoon')) result.period = 'afternoon';
+  }
+
+  return result;
+}
+
+function slotMatchesPref(slot, pref) {
+  if (!pref || Object.keys(pref).length === 0) return false;
+  const laHour = parseInt(slot.start.toLocaleString('en-US', { timeZone: TZ, hour: 'numeric', hour12: false }));
+  const laWeekday = slot.start.toLocaleString('en-US', { timeZone: TZ, weekday: 'long' }).toLowerCase();
+  if (pref.weekday && !laWeekday.startsWith(pref.weekday)) return false;
+  if (pref.hour !== undefined) {
+    if (laHour !== pref.hour) return false;
+  } else if (pref.period) {
+    if (pref.period === 'morning' && laHour >= 12) return false;
+    if (pref.period === 'afternoon' && laHour < 12) return false;
+  }
+  return true;
+}
+
 // ─── Calendar: generate candidate slots ──────────────────────────────────────
 function buildCandidateSlots() {
   const candidates = [];
@@ -244,47 +285,63 @@ function buildCandidateSlots() {
   return candidates;
 }
 
-// ─── Calendar: find 3 available slots ────────────────────────────────────────
-async function findAvailableSlots() {
+// ─── Calendar: find available slots, optionally matching a preferred time ─────
+async function findAvailableSlots(preferred) {
   const candidates = buildCandidateSlots();
-  if (!candidates.length) return [];
+  if (!candidates.length) return { slots: [] };
 
-  // If calendar unavailable, return first 3 candidates (no conflict check)
+  const toResult = s => ({ label: s.label, start: s.start.toISOString(), end: s.end.toISOString() });
+
+  // Query freebusy — fall back gracefully if calendar unavailable
+  let busy = [];
   const cal = getCalClient();
-  if (!cal) {
-    return candidates.slice(0, 3).map(s => ({
-      label: s.label, start: s.start.toISOString(), end: s.end.toISOString(),
-    }));
+  if (cal) {
+    try {
+      const fb = await cal.client.freebusy.query({
+        requestBody: {
+          timeMin: candidates[0].start.toISOString(),
+          timeMax: candidates[candidates.length - 1].end.toISOString(),
+          timeZone: TZ,
+          items: [{ id: CALENDAR_ID }],
+        },
+      });
+      busy = fb.data.calendars[CALENDAR_ID]?.busy || [];
+      console.log(`[Calendar] freebusy ok — ${busy.length} busy block(s)`);
+    } catch (err) {
+      console.error('[Calendar] freebusy error:', err.message);
+    }
   }
 
-  try {
-    const fb = await cal.client.freebusy.query({
-      requestBody: {
-        timeMin: candidates[0].start.toISOString(),
-        timeMax: candidates[candidates.length - 1].end.toISOString(),
-        timeZone: TZ,
-        items: [{ id: CALENDAR_ID }],
-      },
-    });
+  const available = candidates.filter(slot =>
+    !busy.some(b => {
+      const bs = new Date(b.start), be = new Date(b.end);
+      return slot.start < be && slot.end > bs;
+    })
+  );
 
-    const busy = fb.data.calendars[CALENDAR_ID]?.busy || [];
+  // No preference — return first 3 available
+  if (!preferred) {
+    return { slots: available.slice(0, 3).map(toResult) };
+  }
 
-    const available = candidates.filter(slot =>
-      !busy.some(b => {
-        const bs = new Date(b.start), be = new Date(b.end);
-        return slot.start < be && slot.end > bs;
-      })
-    );
+  // Try to match the customer's preferred time
+  const pref = parsePreferredTime(preferred);
+  const prefMatches = available.filter(s => slotMatchesPref(s, pref));
+  console.log(`[Calendar] preferred="${preferred}" parsed=`, pref, `matches=${prefMatches.length}`);
 
-    return available.slice(0, 3).map(s => ({
-      label: s.label, start: s.start.toISOString(), end: s.end.toISOString(),
-    }));
-  } catch (err) {
-    console.error('[Calendar] freebusy error:', err.message);
-    // Fall back to first 3 candidates
-    return candidates.slice(0, 3).map(s => ({
-      label: s.label, start: s.start.toISOString(), end: s.end.toISOString(),
-    }));
+  if (prefMatches.length > 0) {
+    const first = prefMatches[0];
+    const others = available.filter(s => s !== first).slice(0, 2);
+    return {
+      slots: [first, ...others].map(toResult),
+      preferredAvailable: true,
+      preferredLabel: first.label,
+    };
+  } else {
+    return {
+      slots: available.slice(0, 3).map(toResult),
+      preferredAvailable: false,
+    };
   }
 }
 
@@ -525,8 +582,10 @@ app.get('/api/debug', async (req, res) => {
 // ─── GET /api/slots ───────────────────────────────────────────────────────────
 app.get('/api/slots', async (req, res) => {
   try {
-    const slots = await findAvailableSlots();
-    res.json({ slots });
+    const preferred = req.query.preferred || null;
+    console.log(`[/api/slots] preferred="${preferred || '(none)'}"`);
+    const result = await findAvailableSlots(preferred);
+    res.json(result);
   } catch (err) {
     console.error('[/api/slots]', err.message);
     res.status(500).json({ error: 'Failed to fetch available slots' });
@@ -593,17 +652,20 @@ app.post('/api/bookings', async (req, res) => {
       console.warn('[Bookings] filesystem write skipped:', fsErr.code);
     }
 
-    // Respond immediately so the widget doesn't time out
-    res.json({ success: true });
+    // Run calendar + email in parallel, await both before responding so
+    // Vercel keeps the function alive long enough to complete them.
+    console.log('[Booking] running calendar + email in parallel...');
+    const [calResult, emailResult] = await Promise.allSettled([
+      createCalendarEvent(booking),
+      sendEmails(booking),
+    ]);
 
-    // Calendar + email in background (best-effort — may not complete on short-lived serverless)
-    createCalendarEvent(booking)
-      .then(id => console.log(`[Booking] calendar ok — eventId=${id || 'none'}`))
-      .catch(err => console.error('[Booking] calendar failed:', err.message));
+    const calOk = calResult.status === 'fulfilled';
+    const emailOk = emailResult.status === 'fulfilled';
+    console.log(`[Booking] calendar: ${calOk ? 'ok id=' + calResult.value : 'FAILED ' + calResult.reason?.message}`);
+    console.log(`[Booking] email: ${emailOk ? 'ok' : 'FAILED ' + emailResult.reason?.message}`);
 
-    sendEmails(booking)
-      .then(() => console.log(`[Booking] emails sent`))
-      .catch(err => console.error('[Booking] email failed:', err.message));
+    res.json({ success: true, calendarOk: calOk, emailOk: emailOk });
 
   } catch (err) {
     console.error('[/api/bookings] unhandled error:', err.message, err.stack);

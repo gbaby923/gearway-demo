@@ -716,10 +716,10 @@
     scrollToBottom();
   }
 
-  function appendSlotsCard(slots) {
+  function appendSlotsCard(slots, headerText) {
     var div = document.createElement('div');
     div.className = 'gw-slots-card';
-    div.innerHTML = '<h4>Choose a time</h4>';
+    div.innerHTML = '<h4>' + escHtml(headerText || 'Choose a time') + '</h4>';
     slots.forEach(function (slot) {
       var btn = document.createElement('button');
       btn.className = 'gw-slot-btn';
@@ -858,23 +858,36 @@
   // ─── Slot flow ─────────────────────────────────────────────────────────────────
   function fetchSlots(booking) {
     state.pendingBooking = booking;
-    appendSystemMessage('Checking availability…');
+    var checkingEl = appendBotMessage('Give me one moment while I check availability…');
 
-    fetchWithTimeout(CONFIG.slotsEndpoint, {}, 25000)
+    var url = CONFIG.slotsEndpoint;
+    if (booking.preferred_time) {
+      url += '?preferred=' + encodeURIComponent(booking.preferred_time);
+    }
+
+    fetchWithTimeout(url, {}, 25000)
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        // Remove the "Checking availability" system message
-        var sysMsg = messagesEl.querySelector('.gw-msg-system:last-child');
-        if (sysMsg) sysMsg.remove();
+        if (checkingEl && checkingEl.parentNode) checkingEl.remove();
 
         if (!data.slots || !data.slots.length) {
           appendBotMessage("Hmm, I'm having trouble pulling up the calendar right now. Give us a call at **(818) 386-8889** and we'll get you scheduled.");
           return;
         }
-        appendSlotsCard(data.slots);
+
+        var header;
+        if (data.preferredAvailable === true) {
+          header = "That time works! Here it is plus a couple of alternatives:";
+        } else if (data.preferredAvailable === false) {
+          header = "That slot's taken — here are 3 open times nearby:";
+        } else {
+          header = 'Choose a time';
+        }
+        appendSlotsCard(data.slots, header);
       })
       .catch(function (err) {
         console.error('[Slots]', err);
+        if (checkingEl && checkingEl.parentNode) checkingEl.remove();
         appendBotMessage("Couldn't load the calendar right now. Call us at **(818) 386-8889** and we'll book you in directly.");
       });
   }
