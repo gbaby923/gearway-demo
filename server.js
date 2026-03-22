@@ -41,21 +41,27 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 // Credentials loaded from env var (Vercel) or local file (dev).
 // Set GOOGLE_SERVICE_ACCOUNT_JSON to the base64-encoded contents of service-account.json.
 let calClient = null;
+let calAuth = null;
+let calServiceEmail = null;
 try {
   let sa;
   if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    sa = JSON.parse(Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_JSON, 'base64').toString('utf8'));
+    const decoded = Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_JSON, 'base64').toString('utf8');
+    sa = JSON.parse(decoded);
+    console.log('[Calendar] decoded SA JSON from env, client_email:', sa.client_email);
   } else {
     sa = require('./service-account.json');
+    console.log('[Calendar] loaded SA JSON from local file, client_email:', sa.client_email);
   }
-  const calAuth = new google.auth.JWT(
+  calServiceEmail = sa.client_email;
+  calAuth = new google.auth.JWT(
     sa.client_email, null, sa.private_key,
     ['https://www.googleapis.com/auth/calendar']
   );
   calClient = google.calendar({ version: 'v3', auth: calAuth });
-  console.log('[Calendar] initialized:', sa.client_email);
+  console.log('[Calendar] client initialized for:', sa.client_email);
 } catch (e) {
-  console.warn('[Calendar] credentials not available:', e.message);
+  console.error('[Calendar] init FAILED:', e.message);
 }
 
 // ─── System prompt ─────────────────────────────────────────────────────────────
@@ -438,8 +444,29 @@ app.get('/api/debug', async (req, res) => {
     report.tests.email = { ok: false, error: 'RESEND_API_KEY not set' };
   }
 
-  // Test 2: list one upcoming calendar event (read-only check)
-  if (calClient) {
+  // Test 2a: explicitly fetch an OAuth2 access token from Google
+  if (calAuth) {
+    try {
+      const tokenRes = await calAuth.authorize();
+      report.tests.calendarAuth = {
+        ok: true,
+        tokenType: tokenRes.token_type,
+        expiresAt: new Date(tokenRes.expiry_date).toISOString(),
+        serviceAccount: calServiceEmail,
+      };
+    } catch (err) {
+      report.tests.calendarAuth = {
+        ok: false,
+        serviceAccount: calServiceEmail,
+        error: err.message,
+      };
+    }
+  } else {
+    report.tests.calendarAuth = { ok: false, error: 'calAuth not initialized' };
+  }
+
+  // Test 2b: list upcoming calendar events (requires calendar shared with SA)
+  if (calClient && report.tests.calendarAuth?.ok) {
     try {
       const result = await calClient.events.list({
         calendarId: CALENDAR_ID,
@@ -454,8 +481,18 @@ app.get('/api/debug', async (req, res) => {
       };
     } catch (err) {
       const detail = err.response?.data?.error || err.message;
-      report.tests.calendar = { ok: false, error: JSON.stringify(detail) };
+      report.tests.calendar = {
+        ok: false,
+        error: JSON.stringify(detail),
+        hint: 'If 403: share your Google Calendar with ' + calServiceEmail + ' (give it "Make changes to events" permission)',
+      };
     }
+  } else if (!report.tests.calendarAuth?.ok) {
+    report.tests.calendar = {
+      ok: false,
+      error: 'skipped — auth failed above',
+      hint: 'If auth failed: ensure the Google Calendar API is enabled at console.cloud.google.com for project mount-sms-demo',
+    };
   } else {
     report.tests.calendar = { ok: false, error: 'calClient not initialized' };
   }
