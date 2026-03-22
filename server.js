@@ -15,6 +15,14 @@ const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID ||
 const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL || 'ruizgabriel327@gmail.com';
 const FROM_EMAIL = 'Gearway Auto <onboarding@resend.dev>';
 
+// ─── Startup env check ────────────────────────────────────────────────────────
+console.log('[Startup] ENV check:');
+console.log('  ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY ? '✓ set' : '✗ MISSING');
+console.log('  RESEND_API_KEY:   ', process.env.RESEND_API_KEY    ? '✓ set' : '✗ MISSING');
+console.log('  GOOGLE_CAL_ID:   ', process.env.GOOGLE_CALENDAR_ID ? '✓ set' : '✗ MISSING');
+console.log('  GOOGLE_SA_JSON:  ', process.env.GOOGLE_SERVICE_ACCOUNT_JSON ? '✓ set' : '(using local file)');
+console.log('  NOTIFY_EMAIL:    ', NOTIFY_EMAIL);
+
 app.use(express.json({ limit: '12mb' })); // accommodate base64 image uploads
 app.use(express.static(__dirname));
 
@@ -262,7 +270,11 @@ async function findAvailableSlots() {
 
 // ─── Calendar: create event ───────────────────────────────────────────────────
 async function createCalendarEvent(booking) {
-  if (!calClient) return null;
+  if (!calClient) {
+    console.warn('[Calendar] skipping event — calClient not initialized');
+    return null;
+  }
+  console.log('[Calendar] creating event for calendar:', CALENDAR_ID.slice(0, 20) + '…');
   try {
     const event = {
       summary: `${booking.name} — ${booking.service}`,
@@ -276,11 +288,14 @@ async function createCalendarEvent(booking) {
       end: { dateTime: booking.slot_end, timeZone: TZ },
       location: '14333 Victory Blvd, Van Nuys, CA 91401',
     };
+    console.log('[Calendar] event payload:', JSON.stringify({ summary: event.summary, start: event.start }));
     const result = await calClient.events.insert({ calendarId: CALENDAR_ID, requestBody: event });
-    console.log('[Calendar] event created:', result.data.id);
+    console.log('[Calendar] event created OK — id:', result.data.id, 'link:', result.data.htmlLink);
     return result.data.id;
   } catch (err) {
-    console.error('[Calendar] create event failed:', err.message);
+    // Surface the full Google API error (status, errors array) not just the message
+    const detail = err.response?.data?.error || err.message;
+    console.error('[Calendar] create event FAILED:', JSON.stringify(detail));
     return null;
   }
 }
@@ -345,31 +360,109 @@ function shopEmailHTML(b) {
 
 // ─── Send emails ───────────────────────────────────────────────────────────────
 async function sendEmails(booking) {
-  const jobs = [];
+  if (!process.env.RESEND_API_KEY) {
+    console.error('[Email] RESEND_API_KEY is not set — skipping');
+    return;
+  }
 
-  // Shop notification
-  jobs.push(resend.emails.send({
-    from: FROM_EMAIL,
-    to: NOTIFY_EMAIL,
-    subject: `New Booking: ${booking.name} — ${booking.service}`,
-    html: shopEmailHTML(booking),
-  }));
+  console.log('[Email] sending to:', NOTIFY_EMAIL);
 
-  // Customer confirmation — send to NOTIFY_EMAIL for demo
-  // In production: send to booking.email when it's a verified domain
-  jobs.push(resend.emails.send({
-    from: FROM_EMAIL,
-    to: NOTIFY_EMAIL,
-    subject: `Appointment Confirmed: ${booking.chosen_slot}`,
-    html: customerEmailHTML(booking),
-  }));
+  const jobs = [
+    {
+      label: 'shop notification',
+      payload: {
+        from: FROM_EMAIL,
+        to: NOTIFY_EMAIL,
+        subject: `New Booking: ${booking.name} — ${booking.service}`,
+        html: shopEmailHTML(booking),
+      },
+    },
+    {
+      label: 'customer confirmation',
+      payload: {
+        from: FROM_EMAIL,
+        to: NOTIFY_EMAIL, // demo: both go to shop; production: use booking.email
+        subject: `Appointment Confirmed: ${booking.chosen_slot}`,
+        html: customerEmailHTML(booking),
+      },
+    },
+  ];
 
-  const results = await Promise.allSettled(jobs);
-  results.forEach((r, i) => {
-    if (r.status === 'rejected') console.error(`[Email ${i}] failed:`, r.reason?.message);
-    else console.log(`[Email ${i}] sent:`, r.value?.data?.id);
-  });
+  for (const job of jobs) {
+    try {
+      // Resend SDK returns { data, error } — does NOT throw on API errors
+      const { data, error } = await resend.emails.send(job.payload);
+      if (error) {
+        console.error(`[Email] ${job.label} failed (API error):`, JSON.stringify(error));
+      } else {
+        console.log(`[Email] ${job.label} sent OK — id:`, data?.id);
+      }
+    } catch (err) {
+      console.error(`[Email] ${job.label} threw:`, err.message);
+    }
+  }
 }
+
+// ─── GET /api/debug ───────────────────────────────────────────────────────────
+// Hit this endpoint to verify all integrations are wired up correctly.
+app.get('/api/debug', async (req, res) => {
+  const report = {
+    env: {
+      ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
+      RESEND_API_KEY:    !!process.env.RESEND_API_KEY,
+      GOOGLE_CALENDAR_ID: !!process.env.GOOGLE_CALENDAR_ID,
+      GOOGLE_SERVICE_ACCOUNT_JSON: !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
+      NOTIFY_EMAIL: NOTIFY_EMAIL,
+    },
+    calendar: { initialized: !!calClient, calendarId: CALENDAR_ID.slice(0, 24) + '…' },
+    resend: { initialized: !!process.env.RESEND_API_KEY },
+    tests: {},
+  };
+
+  // Test 1: send a test email
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const { data, error } = await resend.emails.send({
+        from: FROM_EMAIL,
+        to: NOTIFY_EMAIL,
+        subject: '[Gearway Debug] Email integration test',
+        html: '<p>If you got this, Resend is working correctly.</p>',
+      });
+      report.tests.email = error
+        ? { ok: false, error: JSON.stringify(error) }
+        : { ok: true, id: data?.id };
+    } catch (err) {
+      report.tests.email = { ok: false, error: err.message };
+    }
+  } else {
+    report.tests.email = { ok: false, error: 'RESEND_API_KEY not set' };
+  }
+
+  // Test 2: list one upcoming calendar event (read-only check)
+  if (calClient) {
+    try {
+      const result = await calClient.events.list({
+        calendarId: CALENDAR_ID,
+        maxResults: 1,
+        singleEvents: true,
+        orderBy: 'startTime',
+        timeMin: new Date().toISOString(),
+      });
+      report.tests.calendar = {
+        ok: true,
+        nextEvent: result.data.items?.[0]?.summary || '(no upcoming events)',
+      };
+    } catch (err) {
+      const detail = err.response?.data?.error || err.message;
+      report.tests.calendar = { ok: false, error: JSON.stringify(detail) };
+    }
+  } else {
+    report.tests.calendar = { ok: false, error: 'calClient not initialized' };
+  }
+
+  console.log('[Debug]', JSON.stringify(report, null, 2));
+  res.json(report);
+});
 
 // ─── GET /api/slots ───────────────────────────────────────────────────────────
 app.get('/api/slots', async (req, res) => {
@@ -431,27 +524,35 @@ app.post('/api/bookings', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: name, phone, vehicle' });
     }
 
-    // 1. Create Google Calendar event
+    console.log(`[Booking] received — name=${booking.name}, service=${booking.service}, slot=${booking.chosen_slot}`);
+    console.log(`[Booking] slot_start=${booking.slot_start}, slot_end=${booking.slot_end}`);
+    console.log(`[Booking] calClient ready=${!!calClient}`);
+
+    // 1. Create Google Calendar event (awaited — must complete before response)
     const eventId = await createCalendarEvent(booking);
     if (eventId) booking.calendar_event_id = eventId;
+    console.log(`[Booking] calendar step done — eventId=${eventId || 'none'}`);
 
-    // 2. Send emails (non-blocking — don't fail the booking if email fails)
-    sendEmails(booking).catch(e => console.error('[Email]', e.message));
+    // 2. Send emails (awaited — Vercel serverless terminates after res.json(),
+    //    fire-and-forget promises are killed before they complete)
+    await sendEmails(booking);
+    console.log(`[Booking] email step done`);
 
-    // 3. Persist to bookings.json (best-effort — read-only on Vercel serverless)
+    // 3. Persist to bookings.json (best-effort — filesystem is read-only on Vercel)
     try {
       const existing = JSON.parse(fs.readFileSync(BOOKINGS_FILE, 'utf8') || '[]');
       existing.push({ ...booking, id: Date.now().toString(), created_at: new Date().toISOString() });
       fs.writeFileSync(BOOKINGS_FILE, JSON.stringify(existing, null, 2), 'utf8');
+      console.log(`[Booking] saved to bookings.json`);
     } catch (fsErr) {
       console.warn('[Bookings] filesystem write skipped:', fsErr.code);
     }
 
-    console.log(`[Booking confirmed] ${booking.name} — ${booking.service} — ${booking.chosen_slot}`);
+    console.log(`[Booking] complete — ${booking.name} / ${booking.service} / ${booking.chosen_slot}`);
     res.json({ success: true, calendar_event_id: eventId || null });
 
   } catch (err) {
-    console.error('[/api/bookings]', err.message);
+    console.error('[/api/bookings] unhandled error:', err.message, err.stack);
     res.status(500).json({ error: 'Failed to process booking' });
   }
 });
