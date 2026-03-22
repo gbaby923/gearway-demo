@@ -436,7 +436,14 @@ app.get('/api/debug', async (req, res) => {
       GOOGLE_SERVICE_ACCOUNT_JSON: !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
       NOTIFY_EMAIL: NOTIFY_EMAIL,
     },
-    calendar: { initialized: !!calClient, calendarId: CALENDAR_ID.slice(0, 24) + '…' },
+    calendar: {
+      initialized: !!calClient,
+      calendarId: CALENDAR_ID.slice(0, 24) + '…',
+      credSource: process.env.GOOGLE_CLIENT_EMAIL ? 'individual_vars' : process.env.GOOGLE_SERVICE_ACCOUNT_JSON ? 'base64_json' : 'local_file',
+      privateKeyLength: (process.env.GOOGLE_PRIVATE_KEY || '').length,
+      privateKeyFirst27: (process.env.GOOGLE_PRIVATE_KEY || '').slice(0, 27),
+      serviceAccount: calServiceEmail,
+    },
     resend: { initialized: !!process.env.RESEND_API_KEY },
     tests: {},
   };
