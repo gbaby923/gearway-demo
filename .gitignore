@@ -3,3 +3,6 @@ node_modules/
 gearway_raw_tmp.html
 *.log
 .DS_Store
+
+.vercel
+service-account.json

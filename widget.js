@@ -1,13 +1,14 @@
 (function () {
   'use strict';
 
-  // ─── Config ──────────────────────────────────────────────────────────────────
+  // ─── Config ───────────────────────────────────────────────────────────────────
   var CONFIG = {
     shopName: 'Gearway Auto',
     phone: '(818) 386-8889',
     address: '14333 Victory Blvd, Van Nuys, CA 91401',
     chatEndpoint: '/api/chat',
     bookingEndpoint: '/api/bookings',
+    slotsEndpoint: '/api/slots',
     poweredBy: 'MOUNT Studio',
   };
 
@@ -42,7 +43,7 @@
       bottom: 96px;
       right: 24px;
       width: 370px;
-      height: 560px;
+      height: 580px;
       background: #0a0a0a;
       border: 1px solid #2a2a2a;
       border-radius: 16px;
@@ -85,12 +86,7 @@
       flex-shrink: 0;
     }
     #gw-header-info { flex: 1; min-width: 0; }
-    #gw-header-name {
-      font-size: 14px;
-      font-weight: 600;
-      color: #fff;
-      letter-spacing: 0.01em;
-    }
+    #gw-header-name { font-size: 14px; font-weight: 600; color: #fff; letter-spacing: 0.01em; }
     #gw-header-status {
       font-size: 11px;
       color: #6ee7b7;
@@ -165,6 +161,24 @@
       border-radius: 8px;
     }
 
+    /* Photo message */
+    .gw-msg-photo {
+      align-self: flex-end;
+      max-width: 75%;
+      padding: 0;
+      overflow: hidden;
+      border-radius: 12px;
+      border-bottom-right-radius: 4px;
+    }
+    .gw-msg-photo img {
+      width: 100%;
+      max-width: 220px;
+      height: auto;
+      display: block;
+      border-radius: 12px;
+      border-bottom-right-radius: 4px;
+    }
+
     /* Booking confirmation card */
     .gw-booking-card {
       background: #0f1e18;
@@ -172,16 +186,19 @@
       border-radius: 12px;
       padding: 14px;
       align-self: flex-start;
-      max-width: 92%;
+      max-width: 94%;
       font-size: 13px;
     }
     .gw-booking-card h4 {
       color: #6ee7b7;
       margin: 0 0 10px;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
     .gw-booking-card .gw-booking-row {
       display: flex;
@@ -190,9 +207,56 @@
       color: #e0e0e0;
     }
     .gw-booking-card .gw-booking-label {
-      color: #666;
+      color: #555;
       flex-shrink: 0;
-      min-width: 70px;
+      min-width: 74px;
+      font-size: 12px;
+    }
+    .gw-booking-card .gw-booking-val { font-size: 13px; }
+    .gw-booking-divider {
+      height: 1px;
+      background: #1a3329;
+      margin: 8px 0;
+    }
+
+    /* Slot selection card */
+    .gw-slots-card {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 14px;
+      align-self: flex-start;
+      max-width: 94%;
+      font-size: 13px;
+    }
+    .gw-slots-card h4 {
+      color: #aaa;
+      margin: 0 0 10px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .gw-slot-btn {
+      display: block;
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #e0e0e0;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+      margin-bottom: 6px;
+      font-family: inherit;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .gw-slot-btn:last-child { margin-bottom: 0; }
+    .gw-slot-btn:hover {
+      background: #222;
+      border-color: #6ee7b7;
+      color: #fff;
     }
 
     /* Typing indicator */
@@ -208,9 +272,7 @@
       align-self: flex-start;
     }
     .gw-typing span {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
+      width: 6px; height: 6px; border-radius: 50%;
       background: #555;
       animation: gw-bounce 1.2s infinite;
     }
@@ -241,21 +303,67 @@
       white-space: nowrap;
       font-family: inherit;
     }
-    .gw-chip:hover {
-      background: #2a2a2a;
-      border-color: #555;
-      color: #fff;
-    }
+    .gw-chip:hover { background: #2a2a2a; border-color: #555; color: #fff; }
 
-    /* Input */
-    #gw-input-row {
-      padding: 10px 14px 12px;
+    /* Image preview (above input) */
+    #gw-photo-preview {
+      margin: 0 14px 8px;
+      position: relative;
+      display: none;
+      width: fit-content;
+    }
+    #gw-photo-preview img {
+      max-height: 72px;
+      max-width: 100%;
+      border-radius: 8px;
+      display: block;
+      border: 1px solid #2a2a2a;
+    }
+    #gw-photo-remove {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #333;
+      border: none;
+      color: #ccc;
+      cursor: pointer;
       display: flex;
-      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      line-height: 1;
+      padding: 0;
+      transition: background 0.15s;
+    }
+    #gw-photo-remove:hover { background: #555; color: #fff; }
+
+    /* Input row */
+    #gw-input-row {
+      padding: 6px 14px 12px;
+      display: flex;
+      gap: 7px;
       align-items: flex-end;
       border-top: 1px solid #1a1a1a;
       flex-shrink: 0;
     }
+    #gw-photo-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    #gw-photo-btn:hover { background: #222; border-color: #444; }
+    #gw-photo-input { display: none; }
     #gw-input {
       flex: 1;
       background: #141414;
@@ -275,8 +383,8 @@
     #gw-input::placeholder { color: #444; }
     #gw-input:focus { border-color: #444; }
     #gw-send-btn {
-      width: 36px;
-      height: 36px;
+      width: 34px;
+      height: 34px;
       border-radius: 8px;
       background: #fff;
       border: none;
@@ -301,22 +409,17 @@
       letter-spacing: 0.03em;
       flex-shrink: 0;
     }
-    #gw-footer a {
-      color: #444;
-      text-decoration: none;
-    }
+    #gw-footer a { color: #444; text-decoration: none; }
     #gw-footer a:hover { color: #666; }
 
     /* Notification dot */
     #gw-notif-dot {
       position: absolute;
-      top: 0;
-      right: 0;
-      width: 14px;
-      height: 14px;
+      top: 0; right: 0;
+      width: 14px; height: 14px;
       background: #6ee7b7;
       border-radius: 50%;
-      border: 2px solid #0a0a0a;
+      border: 2px solid #fff;
       display: none;
       animation: gw-pulse 2s infinite;
     }
@@ -328,31 +431,29 @@
     /* Mobile */
     @media (max-width: 480px) {
       #gw-widget-panel {
-        bottom: 0;
-        right: 0;
-        width: 100%;
-        height: 100%;
-        border-radius: 0;
-        border: none;
+        bottom: 0; right: 0;
+        width: 100%; height: 100%;
+        border-radius: 0; border: none;
       }
-      #gw-widget-btn {
-        bottom: 16px;
-        right: 16px;
-      }
+      #gw-widget-btn { bottom: 16px; right: 16px; }
     }
   `;
 
-  // ─── State ────────────────────────────────────────────────────────────────────
+  // ─── State ─────────────────────────────────────────────────────────────────────
   var state = {
     open: false,
-    messages: [],        // {role: 'user'|'assistant', content: string}
+    messages: [],       // {role, content, image?}
     loading: false,
     greeted: false,
+    pendingBooking: null,   // booking data waiting for slot selection
+    pendingImage: null,     // {data: base64, type: mimeType} — attached to next send
   };
 
-  // ─── DOM ──────────────────────────────────────────────────────────────────────
-  var btn, panel, messagesEl, inputEl, sendBtn, chipsEl, notifDot;
+  // ─── DOM refs ──────────────────────────────────────────────────────────────────
+  var btn, panel, messagesEl, inputEl, sendBtn, chipsEl, notifDot,
+      photoBtn, photoInput, photoPreviewEl;
 
+  // ─── Init ──────────────────────────────────────────────────────────────────────
   function init() {
     injectStyles();
     createButton();
@@ -366,30 +467,42 @@
     document.head.appendChild(s);
   }
 
+  // ─── Button ────────────────────────────────────────────────────────────────────
   function createButton() {
     var wrap = document.createElement('div');
     wrap.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:99999;';
 
     btn = document.createElement('button');
     btn.id = 'gw-widget-btn';
-    btn.setAttribute('aria-label', 'Chat with service advisor');
-    btn.innerHTML = `
-      <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M13 2C7.477 2 3 6.477 3 12c0 1.89.523 3.658 1.43 5.168L3 23l5.832-1.43A9.963 9.963 0 0013 22c5.523 0 10-4.477 10-10S18.523 2 13 2z" fill="#0a0a0a"/>
-        <circle cx="9" cy="12" r="1.4" fill="#fff"/>
-        <circle cx="13" cy="12" r="1.4" fill="#fff"/>
-        <circle cx="17" cy="12" r="1.4" fill="#fff"/>
-      </svg>`;
+    btn.setAttribute('aria-label', 'Chat with Gearway service advisor');
+    setButtonIcon('chat');
 
     notifDot = document.createElement('div');
     notifDot.id = 'gw-notif-dot';
-
     btn.appendChild(notifDot);
+
     btn.addEventListener('click', togglePanel);
     wrap.appendChild(btn);
     document.body.appendChild(wrap);
   }
 
+  function setButtonIcon(type) {
+    var prev = btn.querySelector('svg');
+    if (prev) btn.removeChild(prev);
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    if (type === 'chat') {
+      svg.setAttribute('width', '26'); svg.setAttribute('height', '26');
+      svg.setAttribute('viewBox', '0 0 26 26'); svg.setAttribute('fill', 'none');
+      svg.innerHTML = '<path d="M13 2C7.477 2 3 6.477 3 12c0 1.89.523 3.658 1.43 5.168L3 23l5.832-1.43A9.963 9.963 0 0013 22c5.523 0 10-4.477 10-10S18.523 2 13 2z" fill="#0a0a0a"/><circle cx="9" cy="12" r="1.4" fill="#fff"/><circle cx="13" cy="12" r="1.4" fill="#fff"/><circle cx="17" cy="12" r="1.4" fill="#fff"/>';
+    } else {
+      svg.setAttribute('width', '22'); svg.setAttribute('height', '22');
+      svg.setAttribute('viewBox', '0 0 22 22'); svg.setAttribute('fill', 'none');
+      svg.innerHTML = '<path d="M4 4l14 14M18 4L4 18" stroke="#0a0a0a" stroke-width="2" stroke-linecap="round"/>';
+    }
+    btn.insertBefore(svg, btn.firstChild);
+  }
+
+  // ─── Panel ─────────────────────────────────────────────────────────────────────
   function createPanel() {
     panel = document.createElement('div');
     panel.id = 'gw-widget-panel';
@@ -416,7 +529,19 @@
       </div>
       <div id="gw-messages"></div>
       <div id="gw-chips"></div>
+      <div id="gw-photo-preview">
+        <img id="gw-preview-img" src="" alt="Attached photo"/>
+        <button id="gw-photo-remove" aria-label="Remove photo">✕</button>
+      </div>
       <div id="gw-input-row">
+        <button id="gw-photo-btn" aria-label="Attach photo" title="Attach a photo">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="1" y="3" width="14" height="10" rx="2" stroke="#666" stroke-width="1.3"/>
+            <circle cx="5.5" cy="7.5" r="1.5" stroke="#666" stroke-width="1.2"/>
+            <path d="M1 11l3.5-3.5L8 11l2.5-2.5L15 13" stroke="#666" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <input id="gw-photo-input" type="file" accept="image/*" capture="environment"/>
         <textarea id="gw-input" placeholder="Describe your car issue or ask a question…" rows="1"></textarea>
         <button id="gw-send-btn" aria-label="Send">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -429,21 +554,28 @@
 
     document.body.appendChild(panel);
 
-    messagesEl = panel.querySelector('#gw-messages');
-    inputEl    = panel.querySelector('#gw-input');
-    sendBtn    = panel.querySelector('#gw-send-btn');
-    chipsEl    = panel.querySelector('#gw-chips');
+    messagesEl    = panel.querySelector('#gw-messages');
+    inputEl       = panel.querySelector('#gw-input');
+    sendBtn       = panel.querySelector('#gw-send-btn');
+    chipsEl       = panel.querySelector('#gw-chips');
+    photoBtn      = panel.querySelector('#gw-photo-btn');
+    photoInput    = panel.querySelector('#gw-photo-input');
+    photoPreviewEl = panel.querySelector('#gw-photo-preview');
 
     panel.querySelector('#gw-close-btn').addEventListener('click', togglePanel);
-
     sendBtn.addEventListener('click', handleSend);
     inputEl.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
     });
     inputEl.addEventListener('input', autoResizeTextarea);
+
+    photoBtn.addEventListener('click', function () { photoInput.click(); });
+    photoInput.addEventListener('change', function (e) {
+      var file = e.target.files && e.target.files[0];
+      if (file) handlePhotoSelect(file);
+      photoInput.value = '';
+    });
+    panel.querySelector('#gw-photo-remove').addEventListener('click', clearPhotoPreview);
   }
 
   function autoResizeTextarea() {
@@ -451,57 +583,74 @@
     inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
   }
 
-  // ─── Panel toggle ─────────────────────────────────────────────────────────────
+  // ─── Toggle ────────────────────────────────────────────────────────────────────
   function togglePanel() {
     state.open = !state.open;
     if (state.open) {
       panel.classList.add('gw-open');
       hideNotifDot();
-      if (!state.greeted) {
-        state.greeted = true;
-        setTimeout(sendGreeting, 300);
-      }
+      setButtonIcon('close');
+      if (!state.greeted) { state.greeted = true; setTimeout(sendGreeting, 300); }
       setTimeout(function () { inputEl.focus(); }, 350);
-      // Change button icon to X
-      btn.innerHTML = `
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-          <path d="M4 4l14 14M18 4L4 18" stroke="#0a0a0a" stroke-width="2" stroke-linecap="round"/>
-        </svg>`;
-      btn.appendChild(notifDot);
     } else {
       panel.classList.remove('gw-open');
-      btn.innerHTML = `
-        <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-          <path d="M13 2C7.477 2 3 6.477 3 12c0 1.89.523 3.658 1.43 5.168L3 23l5.832-1.43A9.963 9.963 0 0013 22c5.523 0 10-4.477 10-10S18.523 2 13 2z" fill="#0a0a0a"/>
-          <circle cx="9" cy="12" r="1.4" fill="#fff"/>
-          <circle cx="13" cy="12" r="1.4" fill="#fff"/>
-          <circle cx="17" cy="12" r="1.4" fill="#fff"/>
-        </svg>`;
-      btn.appendChild(notifDot);
+      setButtonIcon('chat');
     }
   }
 
-  function showNotifDot() {
-    if (!state.open) {
-      notifDot.style.display = 'block';
-    }
-  }
-  function hideNotifDot() {
-    notifDot.style.display = 'none';
-  }
+  function showNotifDot() { if (!state.open) notifDot.style.display = 'block'; }
+  function hideNotifDot() { notifDot.style.display = 'none'; }
 
-  // ─── Greeting ─────────────────────────────────────────────────────────────────
+  // ─── Greeting ──────────────────────────────────────────────────────────────────
   function sendGreeting() {
-    var greetings = [
-      "Hey! I'm your Gearway service advisor. What's going on with your vehicle today? Describe any sounds, symptoms, or concerns and I'll help you figure out what you're dealing with.",
-      "Hi there — what can I help you with? Got a noise, a warning light, or something that just doesn't feel right? Tell me what's happening and we'll work through it.",
-    ];
-    var msg = greetings[Math.floor(Math.random() * greetings.length)];
-    appendBotMessage(msg);
+    appendBotMessage("Hey! I'm your Gearway service advisor. What's going on with your vehicle today? Describe any sounds, symptoms, or concerns — or attach a photo if that's easier.");
     showChips(['Squeaking brakes', 'Check engine light', 'Car won\'t start', 'Strange noise', 'Book a service']);
   }
 
-  // ─── Message rendering ────────────────────────────────────────────────────────
+  // ─── Photo upload ──────────────────────────────────────────────────────────────
+  function handlePhotoSelect(file) {
+    if (!file.type.startsWith('image/')) return;
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var dataUrl = e.target.result;
+      // Resize/compress to keep payload under ~1.5MB
+      resizeImage(dataUrl, 1024, 1024, 0.82, function (resized) {
+        var base64 = resized.split(',')[1];
+        var mimeType = file.type;
+        state.pendingImage = { data: base64, type: mimeType, preview: resized };
+        // Show preview
+        var previewImg = panel.querySelector('#gw-preview-img');
+        previewImg.src = resized;
+        photoPreviewEl.style.display = 'block';
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function resizeImage(dataUrl, maxW, maxH, quality, cb) {
+    var img = new Image();
+    img.onload = function () {
+      var w = img.width, h = img.height;
+      if (w > maxW || h > maxH) {
+        var r = Math.min(maxW / w, maxH / h);
+        w = Math.round(w * r);
+        h = Math.round(h * r);
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      cb(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = dataUrl;
+  }
+
+  function clearPhotoPreview() {
+    state.pendingImage = null;
+    photoPreviewEl.style.display = 'none';
+    panel.querySelector('#gw-preview-img').src = '';
+  }
+
+  // ─── Message rendering ─────────────────────────────────────────────────────────
   function appendBotMessage(text) {
     var div = document.createElement('div');
     div.className = 'gw-msg gw-msg-bot';
@@ -511,11 +660,22 @@
     return div;
   }
 
-  function appendUserMessage(text) {
-    var div = document.createElement('div');
-    div.className = 'gw-msg gw-msg-user';
-    div.textContent = text;
-    messagesEl.appendChild(div);
+  function appendUserMessage(text, imagePreview) {
+    if (imagePreview) {
+      var imgDiv = document.createElement('div');
+      imgDiv.className = 'gw-msg gw-msg-photo';
+      var imgEl = document.createElement('img');
+      imgEl.src = imagePreview;
+      imgEl.alt = 'Attached photo';
+      imgDiv.appendChild(imgEl);
+      messagesEl.appendChild(imgDiv);
+    }
+    if (text) {
+      var div = document.createElement('div');
+      div.className = 'gw-msg gw-msg-user';
+      div.textContent = text;
+      messagesEl.appendChild(div);
+    }
     scrollToBottom();
     clearChips();
   }
@@ -532,14 +692,38 @@
     var div = document.createElement('div');
     div.className = 'gw-booking-card';
     div.innerHTML = `
-      <h4>Appointment Request Sent</h4>
-      <div class="gw-booking-row"><span class="gw-booking-label">Name:</span><span>${escHtml(booking.name)}</span></div>
-      <div class="gw-booking-row"><span class="gw-booking-label">Phone:</span><span>${escHtml(booking.phone)}</span></div>
-      <div class="gw-booking-row"><span class="gw-booking-label">Email:</span><span>${escHtml(booking.email || '—')}</span></div>
-      <div class="gw-booking-row"><span class="gw-booking-label">Vehicle:</span><span>${escHtml(booking.vehicle)}</span></div>
-      <div class="gw-booking-row"><span class="gw-booking-label">Service:</span><span>${escHtml(booking.service)}</span></div>
-      <div class="gw-booking-row"><span class="gw-booking-label">Preferred:</span><span>${escHtml(booking.preferred_time)}</span></div>
+      <h4>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0">
+          <path d="M10 2H9V1H7v1H5V1H3v1H2C1.45 2 1 2.45 1 3v8c0 .55.45 1 1 1h8c.55 0 1-.45 1-1V3c0-.55-.45-1-1-1zm0 9H2V5h8v6z" fill="#6ee7b7"/>
+        </svg>
+        Appointment Confirmed
+      </h4>
+      <div class="gw-booking-row"><span class="gw-booking-label">When</span><span class="gw-booking-val"><strong>${escHtml(booking.chosen_slot)}</strong></span></div>
+      <div class="gw-booking-divider"></div>
+      <div class="gw-booking-row"><span class="gw-booking-label">Name</span><span class="gw-booking-val">${escHtml(booking.name)}</span></div>
+      <div class="gw-booking-row"><span class="gw-booking-label">Phone</span><span class="gw-booking-val">${escHtml(booking.phone)}</span></div>
+      ${booking.email ? `<div class="gw-booking-row"><span class="gw-booking-label">Email</span><span class="gw-booking-val">${escHtml(booking.email)}</span></div>` : ''}
+      <div class="gw-booking-row"><span class="gw-booking-label">Vehicle</span><span class="gw-booking-val">${escHtml(booking.vehicle)}</span></div>
+      <div class="gw-booking-row"><span class="gw-booking-label">Service</span><span class="gw-booking-val">${escHtml(booking.service)}</span></div>
     `;
+    messagesEl.appendChild(div);
+    scrollToBottom();
+  }
+
+  function appendSlotsCard(slots) {
+    var div = document.createElement('div');
+    div.className = 'gw-slots-card';
+    div.innerHTML = '<h4>Choose a time</h4>';
+    slots.forEach(function (slot) {
+      var btn = document.createElement('button');
+      btn.className = 'gw-slot-btn';
+      btn.textContent = slot.label;
+      btn.addEventListener('click', function () {
+        div.remove();
+        handleSlotSelect(slot);
+      });
+      div.appendChild(btn);
+    });
     messagesEl.appendChild(div);
     scrollToBottom();
   }
@@ -551,7 +735,6 @@
     div.innerHTML = '<span></span><span></span><span></span>';
     messagesEl.appendChild(div);
     scrollToBottom();
-    return div;
   }
 
   function removeTyping() {
@@ -560,11 +743,8 @@
   }
 
   function formatText(text) {
-    // Bold **text**
     text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    // Newlines
     text = text.replace(/\n/g, '<br>');
-    // Phone links
     text = text.replace(/(\(818\) 386-8889)/g, '<a href="tel:+18183868889" style="color:#6ee7b7;text-decoration:none;">$1</a>');
     return text;
   }
@@ -573,11 +753,9 @@
     return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  function scrollToBottom() {
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  }
+  function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 
-  // ─── Quick reply chips ────────────────────────────────────────────────────────
+  // ─── Chips ─────────────────────────────────────────────────────────────────────
   function showChips(options) {
     chipsEl.innerHTML = '';
     options.forEach(function (opt) {
@@ -592,20 +770,25 @@
     });
   }
 
-  function clearChips() {
-    chipsEl.innerHTML = '';
-  }
+  function clearChips() { chipsEl.innerHTML = ''; }
 
-  // ─── Send & API ───────────────────────────────────────────────────────────────
+  // ─── Send ──────────────────────────────────────────────────────────────────────
   function handleSend() {
     var text = inputEl.value.trim();
-    if (!text || state.loading) return;
+    var image = state.pendingImage;
+
+    if (!text && !image) return;
+    if (state.loading) return;
 
     inputEl.value = '';
     inputEl.style.height = 'auto';
-    appendUserMessage(text);
+    appendUserMessage(text, image ? image.preview : null);
+    clearPhotoPreview();
 
-    state.messages.push({ role: 'user', content: text });
+    var msg = { role: 'user', content: text || '[Photo attached]' };
+    if (image) msg.image = { data: image.data, type: image.type };
+    state.messages.push(msg);
+
     sendToAPI();
   }
 
@@ -613,8 +796,7 @@
     state.loading = true;
     sendBtn.disabled = true;
     clearChips();
-
-    var typing = showTyping();
+    showTyping();
 
     fetch(CONFIG.chatEndpoint, {
       method: 'POST',
@@ -638,22 +820,14 @@
         if (bookingMatch) {
           try {
             var booking = JSON.parse(bookingMatch[1]);
-            // Strip the JSON block from displayed text
             var displayText = reply.replace(/```booking\n[\s\S]*?```/, '').trim();
             if (displayText) appendBotMessage(displayText);
-            appendBookingCard(booking);
-            saveBooking(booking);
+            fetchSlots(booking);
           } catch (e) {
             appendBotMessage(reply);
           }
         } else {
           appendBotMessage(reply);
-        }
-
-        // Show context-aware chips
-        if (data.chips && data.chips.length) {
-          showChips(data.chips);
-        } else {
           inferChips(reply);
         }
       })
@@ -661,36 +835,93 @@
         removeTyping();
         state.loading = false;
         sendBtn.disabled = false;
-        appendBotMessage("Sorry, I'm having a connection issue right now. Give us a call directly at **(818) 386-8889** and we'll take care of you.");
+        appendBotMessage("Sorry, I'm having a connection issue. Give us a call directly at **(818) 386-8889** and we'll sort you out.");
         console.error('[Gearway Widget]', err);
       });
   }
 
+  // ─── Slot flow ─────────────────────────────────────────────────────────────────
+  function fetchSlots(booking) {
+    state.pendingBooking = booking;
+    appendSystemMessage('Checking availability…');
+
+    fetch(CONFIG.slotsEndpoint)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        // Remove the "Checking availability" system message
+        var sysMsg = messagesEl.querySelector('.gw-msg-system:last-child');
+        if (sysMsg) sysMsg.remove();
+
+        if (!data.slots || !data.slots.length) {
+          appendBotMessage("Hmm, I'm having trouble pulling up the calendar right now. Give us a call at **(818) 386-8889** and we'll get you scheduled.");
+          return;
+        }
+        appendSlotsCard(data.slots);
+      })
+      .catch(function (err) {
+        console.error('[Slots]', err);
+        appendBotMessage("Couldn't load the calendar right now. Call us at **(818) 386-8889** and we'll book you in directly.");
+      });
+  }
+
+  function handleSlotSelect(slot) {
+    var booking = state.pendingBooking;
+    state.pendingBooking = null;
+
+    // Show chosen slot as a user bubble
+    appendUserMessage(slot.label);
+    showTyping();
+
+    // Build the full booking payload
+    var payload = Object.assign({}, booking, {
+      chosen_slot: slot.label,
+      slot_start: slot.start,
+      slot_end: slot.end,
+    });
+
+    // Confirm and book
+    fetch(CONFIG.bookingEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function () {
+        removeTyping();
+        appendBookingCard(payload);
+        // Warm closing from Claude
+        var closingMsg = {
+          role: 'user',
+          content: 'My appointment is confirmed for ' + slot.label + '. Thanks!',
+        };
+        state.messages.push(closingMsg);
+        sendToAPI();
+      })
+      .catch(function (err) {
+        removeTyping();
+        console.error('[Booking]', err);
+        appendBookingCard(payload); // still show the card
+        appendBotMessage("Got you booked in! A confirmation has been sent. See you soon!");
+      });
+  }
+
+  // ─── Context-aware chips ───────────────────────────────────────────────────────
   function inferChips(reply) {
     var lower = reply.toLowerCase();
     if (lower.includes('book') || lower.includes('appointment') || lower.includes('schedule')) {
-      showChips(['Yes, book me in', 'What\'s your availability?', 'Just have a question']);
+      showChips(['Yes, let\'s book it', 'What\'s your availability?', 'Just a question']);
     } else if (lower.includes('brake') || lower.includes('rotor') || lower.includes('pad')) {
       showChips(['How much does it cost?', 'Book a brake inspection', 'Walk-in or appointment?']);
     } else if (lower.includes('engine') || lower.includes('check engine')) {
       showChips(['What causes this?', 'How urgent is it?', 'Book a diagnostic']);
     } else if (lower.includes('oil') || lower.includes('filter')) {
-      showChips(['Book an oil change', 'How often should I do it?', 'What oil do you use?']);
+      showChips(['Book an oil change', 'How often should I?', 'What oil do you use?']);
+    } else if (lower.includes('photo') || lower.includes('image') || lower.includes('picture')) {
+      showChips(['Attach a photo', 'Book an inspection', 'What would that cost?']);
     }
   }
 
-  // ─── Booking save ─────────────────────────────────────────────────────────────
-  function saveBooking(booking) {
-    fetch(CONFIG.bookingEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(booking),
-    }).catch(function (err) {
-      console.error('[Gearway Widget] Booking save failed:', err);
-    });
-  }
-
-  // ─── Boot ─────────────────────────────────────────────────────────────────────
+  // ─── Boot ──────────────────────────────────────────────────────────────────────
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
