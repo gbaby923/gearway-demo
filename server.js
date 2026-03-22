@@ -38,47 +38,41 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // ─── Google Calendar ──────────────────────────────────────────────────────────
-// Credentials loaded from env var (Vercel) or local file (dev).
-// Set GOOGLE_SERVICE_ACCOUNT_JSON to the base64-encoded contents of service-account.json.
-let calClient = null;
-let calAuth = null;
-let calServiceEmail = null;
-try {
-  let clientEmail, privateKey;
+// Do NOT initialize calClient at module level on Vercel — warm-start containers
+// reuse module-level state from the original cold-start, which may predate when
+// env vars were added. getCalClient() reads env vars fresh on every call.
 
+function getCalCredentials() {
   if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
-    // Preferred: individual env vars — avoids base64 encoding issues.
-    // GOOGLE_PRIVATE_KEY stored with literal \n sequences; replace to get real newlines.
-    clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-    privateKey  = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
-    console.log('[Calendar] credentials from individual env vars');
-  } else if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    // Fallback: full JSON base64
-    const decoded = Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_JSON, 'base64').toString('utf8');
-    const sa = JSON.parse(decoded);
-    clientEmail = sa.client_email;
-    privateKey  = sa.private_key;
-    console.log('[Calendar] credentials from GOOGLE_SERVICE_ACCOUNT_JSON base64');
-  } else {
-    const sa = require('./service-account.json');
-    clientEmail = sa.client_email;
-    privateKey  = sa.private_key;
-    console.log('[Calendar] credentials from local service-account.json');
+    return {
+      clientEmail: process.env.GOOGLE_CLIENT_EMAIL,
+      privateKey:  process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      source: 'individual_vars',
+    };
   }
-
-  calServiceEmail = clientEmail;
-  console.log('[Calendar] client_email:', clientEmail);
-  console.log('[Calendar] private_key starts with:', privateKey ? privateKey.slice(0, 27) : 'MISSING/EMPTY');
-
-  calAuth = new google.auth.JWT(
-    clientEmail, null, privateKey,
-    ['https://www.googleapis.com/auth/calendar']
-  );
-  calClient = google.calendar({ version: 'v3', auth: calAuth });
-  console.log('[Calendar] client initialized OK');
-} catch (e) {
-  console.error('[Calendar] init FAILED:', e.message);
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    try {
+      const sa = JSON.parse(Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_JSON, 'base64').toString('utf8'));
+      return { clientEmail: sa.client_email, privateKey: sa.private_key, source: 'base64_json' };
+    } catch (e) { console.error('[Calendar] base64 decode failed:', e.message); }
+  }
+  try {
+    const sa = require('./service-account.json');
+    return { clientEmail: sa.client_email, privateKey: sa.private_key, source: 'local_file' };
+  } catch (e) { /* no local file */ }
+  return null;
 }
+
+function getCalClient() {
+  const creds = getCalCredentials();
+  if (!creds) { console.warn('[Calendar] no credentials'); return null; }
+  if (!creds.privateKey) { console.error('[Calendar] privateKey empty'); return null; }
+  console.log(`[Calendar] init (${creds.source}) email=${creds.clientEmail} keyLen=${creds.privateKey.length}`);
+  const auth = new google.auth.JWT(creds.clientEmail, null, creds.privateKey,
+    ['https://www.googleapis.com/auth/calendar']);
+  return { client: google.calendar({ version: 'v3', auth }), auth, email: creds.clientEmail };
+}
+
 
 // ─── System prompt ─────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are a service advisor at Gearway Auto, an independent auto repair shop in Van Nuys, Los Angeles. Your name is Alex. You're knowledgeable, warm, and straight-talking — like a trusted mechanic friend, not a corporate chatbot.
@@ -253,14 +247,15 @@ async function findAvailableSlots() {
   if (!candidates.length) return [];
 
   // If calendar unavailable, return first 3 candidates (no conflict check)
-  if (!calClient) {
+  const cal = getCalClient();
+  if (!cal) {
     return candidates.slice(0, 3).map(s => ({
       label: s.label, start: s.start.toISOString(), end: s.end.toISOString(),
     }));
   }
 
   try {
-    const fb = await calClient.freebusy.query({
+    const fb = await cal.client.freebusy.query({
       requestBody: {
         timeMin: candidates[0].start.toISOString(),
         timeMax: candidates[candidates.length - 1].end.toISOString(),
@@ -292,8 +287,9 @@ async function findAvailableSlots() {
 
 // ─── Calendar: create event ───────────────────────────────────────────────────
 async function createCalendarEvent(booking) {
-  if (!calClient) {
-    console.warn('[Calendar] skipping event — calClient not initialized');
+  const cal = getCalClient();
+  if (!cal) {
+    console.warn('[Calendar] skipping event — no credentials');
     return null;
   }
   console.log('[Calendar] creating event for calendar:', CALENDAR_ID.slice(0, 20) + '…');
@@ -311,7 +307,7 @@ async function createCalendarEvent(booking) {
       location: '14333 Victory Blvd, Van Nuys, CA 91401',
     };
     console.log('[Calendar] event payload:', JSON.stringify({ summary: event.summary, start: event.start }));
-    const result = await calClient.events.insert({ calendarId: CALENDAR_ID, requestBody: event });
+    const result = await cal.client.events.insert({ calendarId: CALENDAR_ID, requestBody: event });
     console.log('[Calendar] event created OK — id:', result.data.id, 'link:', result.data.htmlLink);
     return result.data.id;
   } catch (err) {
@@ -437,12 +433,10 @@ app.get('/api/debug', async (req, res) => {
       NOTIFY_EMAIL: NOTIFY_EMAIL,
     },
     calendar: {
-      initialized: !!calClient,
       calendarId: CALENDAR_ID.slice(0, 24) + '…',
       credSource: process.env.GOOGLE_CLIENT_EMAIL ? 'individual_vars' : process.env.GOOGLE_SERVICE_ACCOUNT_JSON ? 'base64_json' : 'local_file',
       privateKeyLength: (process.env.GOOGLE_PRIVATE_KEY || '').length,
       privateKeyFirst27: (process.env.GOOGLE_PRIVATE_KEY || '').slice(0, 27),
-      serviceAccount: calServiceEmail,
     },
     resend: { initialized: !!process.env.RESEND_API_KEY },
     tests: {},
@@ -468,30 +462,31 @@ app.get('/api/debug', async (req, res) => {
   }
 
   // Test 2a: explicitly fetch an OAuth2 access token from Google
-  if (calAuth) {
+  const debugCal = getCalClient();
+  if (debugCal) {
     try {
-      const tokenRes = await calAuth.authorize();
+      const tokenRes = await debugCal.auth.authorize();
       report.tests.calendarAuth = {
         ok: true,
         tokenType: tokenRes.token_type,
         expiresAt: new Date(tokenRes.expiry_date).toISOString(),
-        serviceAccount: calServiceEmail,
+        serviceAccount: debugCal.email,
       };
     } catch (err) {
       report.tests.calendarAuth = {
         ok: false,
-        serviceAccount: calServiceEmail,
+        serviceAccount: debugCal.email,
         error: err.message,
       };
     }
   } else {
-    report.tests.calendarAuth = { ok: false, error: 'calAuth not initialized' };
+    report.tests.calendarAuth = { ok: false, error: 'no calendar credentials found' };
   }
 
   // Test 2b: list upcoming calendar events (requires calendar shared with SA)
-  if (calClient && report.tests.calendarAuth?.ok) {
+  if (debugCal && report.tests.calendarAuth?.ok) {
     try {
-      const result = await calClient.events.list({
+      const result = await debugCal.client.events.list({
         calendarId: CALENDAR_ID,
         maxResults: 1,
         singleEvents: true,
@@ -507,7 +502,7 @@ app.get('/api/debug', async (req, res) => {
       report.tests.calendar = {
         ok: false,
         error: JSON.stringify(detail),
-        hint: 'If 403: share your Google Calendar with ' + calServiceEmail + ' (give it "Make changes to events" permission)',
+        hint: 'If 403: share your Google Calendar with ' + (debugCal?.email || 'the service account') + ' (give it "Make changes to events" permission)',
       };
     }
   } else if (!report.tests.calendarAuth?.ok) {
@@ -517,7 +512,7 @@ app.get('/api/debug', async (req, res) => {
       hint: 'If auth failed: ensure the Google Calendar API is enabled at console.cloud.google.com for project mount-sms-demo',
     };
   } else {
-    report.tests.calendar = { ok: false, error: 'calClient not initialized' };
+    report.tests.calendar = { ok: false, error: 'no calendar credentials' };
   }
 
   console.log('[Debug]', JSON.stringify(report, null, 2));
@@ -586,7 +581,7 @@ app.post('/api/bookings', async (req, res) => {
 
     console.log(`[Booking] received — name=${booking.name}, service=${booking.service}, slot=${booking.chosen_slot}`);
     console.log(`[Booking] slot_start=${booking.slot_start}, slot_end=${booking.slot_end}`);
-    console.log(`[Booking] calClient ready=${!!calClient}`);
+    console.log(`[Booking] calendar creds available=${!!getCalClient()}`);
 
     // 1. Create Google Calendar event (awaited — must complete before response)
     const eventId = await createCalendarEvent(booking);
