@@ -44,22 +44,38 @@ let calClient = null;
 let calAuth = null;
 let calServiceEmail = null;
 try {
-  let sa;
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+  let clientEmail, privateKey;
+
+  if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+    // Preferred: individual env vars — avoids base64 encoding issues.
+    // GOOGLE_PRIVATE_KEY stored with literal \n sequences; replace to get real newlines.
+    clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+    privateKey  = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+    console.log('[Calendar] credentials from individual env vars');
+  } else if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    // Fallback: full JSON base64
     const decoded = Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_JSON, 'base64').toString('utf8');
-    sa = JSON.parse(decoded);
-    console.log('[Calendar] decoded SA JSON from env, client_email:', sa.client_email);
+    const sa = JSON.parse(decoded);
+    clientEmail = sa.client_email;
+    privateKey  = sa.private_key;
+    console.log('[Calendar] credentials from GOOGLE_SERVICE_ACCOUNT_JSON base64');
   } else {
-    sa = require('./service-account.json');
-    console.log('[Calendar] loaded SA JSON from local file, client_email:', sa.client_email);
+    const sa = require('./service-account.json');
+    clientEmail = sa.client_email;
+    privateKey  = sa.private_key;
+    console.log('[Calendar] credentials from local service-account.json');
   }
-  calServiceEmail = sa.client_email;
+
+  calServiceEmail = clientEmail;
+  console.log('[Calendar] client_email:', clientEmail);
+  console.log('[Calendar] private_key starts with:', privateKey ? privateKey.slice(0, 27) : 'MISSING/EMPTY');
+
   calAuth = new google.auth.JWT(
-    sa.client_email, null, sa.private_key,
+    clientEmail, null, privateKey,
     ['https://www.googleapis.com/auth/calendar']
   );
   calClient = google.calendar({ version: 'v3', auth: calAuth });
-  console.log('[Calendar] client initialized for:', sa.client_email);
+  console.log('[Calendar] client initialized OK');
 } catch (e) {
   console.error('[Calendar] init FAILED:', e.message);
 }
