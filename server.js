@@ -68,8 +68,11 @@ function getCalClient() {
   if (!creds) { console.warn('[Calendar] no credentials'); return null; }
   if (!creds.privateKey) { console.error('[Calendar] privateKey empty'); return null; }
   console.log(`[Calendar] init (${creds.source}) email=${creds.clientEmail} keyLen=${creds.privateKey.length}`);
-  const auth = new google.auth.JWT(creds.clientEmail, null, creds.privateKey,
-    ['https://www.googleapis.com/auth/calendar']);
+  const auth = new google.auth.JWT({
+    email: creds.clientEmail,
+    key: creds.privateKey,
+    scopes: ['https://www.googleapis.com/auth/calendar'],
+  });
   return { client: google.calendar({ version: 'v3', auth }), auth, email: creds.clientEmail };
 }
 
