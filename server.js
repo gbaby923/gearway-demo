@@ -583,31 +583,27 @@ app.post('/api/bookings', async (req, res) => {
     }
 
     console.log(`[Booking] received — name=${booking.name}, service=${booking.service}, slot=${booking.chosen_slot}`);
-    console.log(`[Booking] slot_start=${booking.slot_start}, slot_end=${booking.slot_end}`);
-    console.log(`[Booking] calendar creds available=${!!getCalClient()}`);
 
-    // 1. Create Google Calendar event (awaited — must complete before response)
-    const eventId = await createCalendarEvent(booking);
-    if (eventId) booking.calendar_event_id = eventId;
-    console.log(`[Booking] calendar step done — eventId=${eventId || 'none'}`);
-
-    // 2. Send emails (awaited — Vercel serverless terminates after res.json(),
-    //    fire-and-forget promises are killed before they complete)
-    await sendEmails(booking);
-    console.log(`[Booking] email step done`);
-
-    // 3. Persist to bookings.json (best-effort — filesystem is read-only on Vercel)
+    // Persist to bookings.json (best-effort — filesystem is read-only on Vercel)
     try {
       const existing = JSON.parse(fs.readFileSync(BOOKINGS_FILE, 'utf8') || '[]');
       existing.push({ ...booking, id: Date.now().toString(), created_at: new Date().toISOString() });
       fs.writeFileSync(BOOKINGS_FILE, JSON.stringify(existing, null, 2), 'utf8');
-      console.log(`[Booking] saved to bookings.json`);
     } catch (fsErr) {
       console.warn('[Bookings] filesystem write skipped:', fsErr.code);
     }
 
-    console.log(`[Booking] complete — ${booking.name} / ${booking.service} / ${booking.chosen_slot}`);
-    res.json({ success: true, calendar_event_id: eventId || null });
+    // Respond immediately so the widget doesn't time out
+    res.json({ success: true });
+
+    // Calendar + email in background (best-effort — may not complete on short-lived serverless)
+    createCalendarEvent(booking)
+      .then(id => console.log(`[Booking] calendar ok — eventId=${id || 'none'}`))
+      .catch(err => console.error('[Booking] calendar failed:', err.message));
+
+    sendEmails(booking)
+      .then(() => console.log(`[Booking] emails sent`))
+      .catch(err => console.error('[Booking] email failed:', err.message));
 
   } catch (err) {
     console.error('[/api/bookings] unhandled error:', err.message, err.stack);

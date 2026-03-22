@@ -44,6 +44,7 @@
       right: 24px;
       width: 370px;
       height: 580px;
+      max-height: calc(100vh - 110px);
       background: #0a0a0a;
       border: 1px solid #2a2a2a;
       border-radius: 16px;
@@ -431,9 +432,14 @@
     /* Mobile */
     @media (max-width: 480px) {
       #gw-widget-panel {
-        bottom: 0; right: 0;
-        width: 100%; height: 100%;
-        border-radius: 0; border: none;
+        bottom: 10px;
+        right: 10px;
+        left: 10px;
+        width: auto;
+        height: auto;
+        max-height: calc(100vh - 90px);
+        border-radius: 16px;
+        border: 1px solid #2a2a2a;
       }
       #gw-widget-btn { bottom: 16px; right: 16px; }
     }
@@ -772,6 +778,15 @@
 
   function clearChips() { chipsEl.innerHTML = ''; }
 
+  // ─── Fetch with timeout ────────────────────────────────────────────────────────
+  function fetchWithTimeout(url, opts, ms) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, ms);
+    return fetch(url, Object.assign({}, opts, { signal: controller.signal }))
+      .then(function (r) { clearTimeout(timer); return r; })
+      .catch(function (e) { clearTimeout(timer); throw e; });
+  }
+
   // ─── Send ──────────────────────────────────────────────────────────────────────
   function handleSend() {
     var text = inputEl.value.trim();
@@ -798,11 +813,11 @@
     clearChips();
     showTyping();
 
-    fetch(CONFIG.chatEndpoint, {
+    fetchWithTimeout(CONFIG.chatEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: state.messages }),
-    })
+    }, 25000)
       .then(function (res) {
         if (!res.ok) throw new Error('API error ' + res.status);
         return res.json();
@@ -845,7 +860,7 @@
     state.pendingBooking = booking;
     appendSystemMessage('Checking availability…');
 
-    fetch(CONFIG.slotsEndpoint)
+    fetchWithTimeout(CONFIG.slotsEndpoint, {}, 25000)
       .then(function (r) { return r.json(); })
       .then(function (data) {
         // Remove the "Checking availability" system message
@@ -880,11 +895,11 @@
     });
 
     // Confirm and book
-    fetch(CONFIG.bookingEndpoint, {
+    fetchWithTimeout(CONFIG.bookingEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    })
+    }, 25000)
       .then(function (r) { return r.json(); })
       .then(function () {
         removeTyping();
