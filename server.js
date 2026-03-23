@@ -13,7 +13,7 @@ const TZ = 'America/Los_Angeles';
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID ||
   'bbe706a1d82fa86cffff73cb8f839058c9e8d2b938ebcac3381862f3e23cd711@group.calendar.google.com';
 const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL || 'ruizgabriel327@gmail.com';
-const FROM_EMAIL = 'Gearway Auto <onboarding@resend.dev>';
+const FROM_EMAIL = 'Gearway Auto <bookings@mount-studio.com>';
 
 // ─── Startup env check ────────────────────────────────────────────────────────
 console.log('[Startup] ENV check:');
@@ -454,13 +454,6 @@ async function sendEmails(booking) {
   }
   console.log('[Email] sendEmails called with booking:', JSON.stringify(booking, null, 2));
 
-  // NOTE: FROM_EMAIL is 'onboarding@resend.dev', Resend's sandbox sender.
-  // In sandbox mode Resend can only deliver to the account owner's verified
-  // address (gabriel.ruiz@mount-studio.com). Emails routed to booking.email
-  // will be accepted by the API but silently dropped unless that address is
-  // also verified in the Resend dashboard, or a custom sending domain is
-  // configured. The routing logic below is correct for production — just
-  // swap in a verified custom domain as FROM_EMAIL when ready.
 
   const jobs = [];
 
