@@ -390,34 +390,59 @@ async function createCalendarEvent(booking) {
 
 // ─── Email templates ──────────────────────────────────────────────────────────
 function customerEmailHTML(b) {
+  const firstName = b.name.split(' ')[0];
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+<body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,sans-serif;">
 <div style="max-width:560px;margin:32px auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-  <div style="background:#0a0a0a;padding:24px 32px;">
-    <div style="font-size:20px;font-weight:700;color:#fff;letter-spacing:0.06em;">GEARWAY AUTO</div>
-    <div style="font-size:12px;color:#666;margin-top:4px;">14333 Victory Blvd · Van Nuys, CA 91401</div>
+  <!-- Header -->
+  <div style="background:#0a0a0a;padding:28px 32px;">
+    <div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:0.08em;">GEARWAY AUTO</div>
+    <div style="font-size:12px;color:#888;margin-top:4px;letter-spacing:0.03em;">14333 Victory Blvd · Van Nuys, CA 91401</div>
   </div>
+  <!-- Body -->
   <div style="padding:32px;">
-    <div style="font-size:22px;font-weight:700;color:#0a0a0a;margin-bottom:6px;">Your appointment is confirmed ✓</div>
-    <div style="font-size:15px;color:#555;margin-bottom:24px;">Hi ${b.name.split(' ')[0]} — we've got you booked. See you soon!</div>
-    <div style="background:#f8f8f8;border-radius:8px;padding:20px;margin-bottom:24px;">
+    <div style="font-size:24px;font-weight:700;color:#0a0a0a;margin-bottom:8px;">Your appointment is confirmed!</div>
+    <div style="font-size:15px;color:#555;margin-bottom:28px;">Hi ${firstName}, we have you all set. Here are your details:</div>
+    <!-- Appointment details -->
+    <div style="background:#f8f8f8;border-radius:8px;padding:20px 24px;margin-bottom:28px;">
       <table style="width:100%;border-collapse:collapse;font-size:14px;">
-        <tr><td style="color:#888;padding:5px 0;width:110px;">Date & Time</td><td style="color:#0a0a0a;font-weight:700;">${b.chosen_slot}</td></tr>
-        <tr><td style="color:#888;padding:5px 0;">Vehicle</td><td style="color:#0a0a0a;">${b.vehicle}</td></tr>
-        <tr><td style="color:#888;padding:5px 0;">Service</td><td style="color:#0a0a0a;">${b.service}</td></tr>
-        <tr><td style="color:#888;padding:5px 0;">Phone</td><td style="color:#0a0a0a;">${b.phone}</td></tr>
+        <tr><td style="color:#888;padding:6px 0;width:120px;">Date &amp; Time</td><td style="color:#0a0a0a;font-weight:700;">${b.chosen_slot}</td></tr>
+        <tr><td style="color:#888;padding:6px 0;">Vehicle</td><td style="color:#0a0a0a;">${b.vehicle}</td></tr>
+        <tr><td style="color:#888;padding:6px 0;">Service</td><td style="color:#0a0a0a;">${b.service}</td></tr>
+        ${b.notes ? `<tr><td style="color:#888;padding:6px 0;">Notes</td><td style="color:#555;font-style:italic;">${b.notes}</td></tr>` : ''}
       </table>
     </div>
-    <div style="font-size:14px;color:#555;line-height:1.6;margin-bottom:24px;">
-      Need to reschedule? Call us anytime at <a href="tel:+18183868889" style="color:#0a0a0a;font-weight:600;">(818) 386-8889</a>.
+    <!-- Where to go -->
+    <div style="margin-bottom:24px;">
+      <div style="font-size:14px;font-weight:700;color:#0a0a0a;margin-bottom:8px;">Where to go</div>
+      <div style="font-size:14px;color:#555;line-height:1.7;">
+        Gearway Auto<br>
+        14333 Victory Blvd<br>
+        Van Nuys, CA 91401
+      </div>
     </div>
-    <a href="tel:+18183868889" style="display:inline-block;background:#0a0a0a;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">
-      (818) 386-8889
+    <!-- What to expect -->
+    <div style="margin-bottom:28px;">
+      <div style="font-size:14px;font-weight:700;color:#0a0a0a;margin-bottom:8px;">What to expect</div>
+      <div style="font-size:14px;color:#555;line-height:1.7;">
+        Pull in and let the front desk know you have an appointment. Our service advisor will check you in, go over the work with you, and keep you updated throughout your visit.
+      </div>
+    </div>
+    <!-- CTA -->
+    <div style="font-size:14px;color:#555;margin-bottom:20px;">
+      Need to reschedule or have questions? Give us a call — we're happy to help.
+    </div>
+    <a href="tel:+18183868889" style="display:inline-block;background:#0a0a0a;color:#fff;padding:13px 28px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:0.03em;">
+      Call (818) 386-8889
     </a>
+    <!-- Sign-off -->
+    <div style="margin-top:32px;font-size:15px;color:#0a0a0a;font-weight:600;">See you soon!</div>
+    <div style="font-size:13px;color:#888;margin-top:4px;">— The Gearway Auto Team</div>
   </div>
+  <!-- Footer -->
   <div style="border-top:1px solid #eee;padding:14px 32px;text-align:center;font-size:11px;color:#bbb;">
-    © 2026 Gearway Auto — Powered by <strong>MOUNT Studio</strong>
+    © 2026 Gearway Auto · 14333 Victory Blvd, Van Nuys CA 91401 · (818) 386-8889
   </div>
 </div>
 </body></html>`;
@@ -426,20 +451,38 @@ function customerEmailHTML(b) {
 function shopEmailHTML(b) {
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
-<div style="max-width:560px;margin:32px auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-  <div style="background:#0a0a0a;padding:20px 32px;">
-    <div style="font-size:13px;font-weight:700;color:#6ee7b7;letter-spacing:0.1em;">NEW BOOKING — GEARWAY AUTO</div>
+<body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,sans-serif;">
+<div style="max-width:560px;margin:32px auto;background:#fff;border-radius:6px;overflow:hidden;border:1px solid #ddd;">
+  <!-- Header bar -->
+  <div style="background:#1a1a1a;padding:14px 24px;display:flex;align-items:center;">
+    <span style="font-size:11px;font-weight:700;color:#6ee7b7;letter-spacing:0.12em;text-transform:uppercase;">New Booking</span>
+    <span style="font-size:11px;color:#555;margin-left:10px;">Gearway Auto</span>
   </div>
-  <div style="padding:28px 32px;">
-    <table style="width:100%;border-collapse:collapse;font-size:14px;">
-      <tr><td style="color:#888;padding:6px 0;width:120px;">Customer</td><td style="color:#0a0a0a;font-weight:700;">${b.name}</td></tr>
-      <tr><td style="color:#888;padding:6px 0;">Phone</td><td><a href="tel:${(b.phone||'').replace(/\D/g,'')}" style="color:#0a0a0a;">${b.phone}</a></td></tr>
-      <tr><td style="color:#888;padding:6px 0;">Email</td><td style="color:#0a0a0a;">${b.email || '—'}</td></tr>
-      <tr><td style="color:#888;padding:6px 0;">Vehicle</td><td style="color:#0a0a0a;">${b.vehicle}</td></tr>
-      <tr><td style="color:#888;padding:6px 0;">Service</td><td style="color:#0a0a0a;">${b.service}</td></tr>
-      <tr><td style="color:#888;padding:6px 0;">Appointment</td><td style="color:#0a0a0a;font-weight:700;">${b.chosen_slot}</td></tr>
-      ${b.notes ? `<tr><td style="color:#888;padding:6px 0;">Notes</td><td style="color:#0a0a0a;">${b.notes}</td></tr>` : ''}
+  <!-- Intake sheet -->
+  <div style="padding:24px;">
+    <div style="font-size:16px;font-weight:700;color:#0a0a0a;margin-bottom:16px;">${b.name}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr style="border-bottom:1px solid #f0f0f0;">
+        <td style="color:#888;padding:8px 0;width:110px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;">Phone</td>
+        <td style="color:#0a0a0a;padding:8px 0;"><a href="tel:${(b.phone||'').replace(/\D/g,'')}" style="color:#0a0a0a;text-decoration:none;font-weight:600;">${b.phone}</a></td>
+      </tr>
+      <tr style="border-bottom:1px solid #f0f0f0;">
+        <td style="color:#888;padding:8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;">Email</td>
+        <td style="color:#0a0a0a;padding:8px 0;">${b.email || '—'}</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f0f0f0;">
+        <td style="color:#888;padding:8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;">Vehicle</td>
+        <td style="color:#0a0a0a;padding:8px 0;">${b.vehicle}</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f0f0f0;">
+        <td style="color:#888;padding:8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;">Service</td>
+        <td style="color:#0a0a0a;padding:8px 0;font-weight:600;">${b.service}</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f0f0f0;">
+        <td style="color:#888;padding:8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;">Appointment</td>
+        <td style="color:#0a0a0a;padding:8px 0;font-weight:700;">${b.chosen_slot}</td>
+      </tr>
+      ${b.notes ? `<tr><td style="color:#888;padding:8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;">Notes</td><td style="color:#555;padding:8px 0;font-style:italic;">${b.notes}</td></tr>` : ''}
     </table>
   </div>
 </div>
@@ -464,23 +507,20 @@ async function sendEmails(booking) {
     payload: {
       from: FROM_EMAIL,
       to: NOTIFY_EMAIL,
-      subject: `New Booking: ${booking.name} — ${booking.service}`,
+      subject: `New Booking - ${booking.name} - ${booking.service}`,
       html: shopEmailHTML(booking),
     },
   });
 
-  // 2. Customer confirmation — goes to the customer's own email if provided
+  // 2. Customer confirmation — goes to the customer's own email only
   if (booking.email) {
-    const confirmTo = booking.email === NOTIFY_EMAIL
-      ? booking.email
-      : [booking.email, NOTIFY_EMAIL];
-    console.log(`[Email] customer confirmation → ${Array.isArray(confirmTo) ? confirmTo.join(', ') : confirmTo}`);
+    console.log(`[Email] customer confirmation → ${booking.email}`);
     jobs.push({
       label: 'customer confirmation',
       payload: {
         from: FROM_EMAIL,
-        to: confirmTo,
-        subject: `Appointment Confirmed: ${booking.chosen_slot}`,
+        to: booking.email,
+        subject: `Your appointment is confirmed - Gearway Auto`,
         html: customerEmailHTML(booking),
       },
     });
