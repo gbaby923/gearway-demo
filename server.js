@@ -452,6 +452,7 @@ async function sendEmails(booking) {
     console.error('[Email] RESEND_API_KEY is not set — skipping');
     return;
   }
+  console.log('[Email] sendEmails called with booking:', JSON.stringify(booking, null, 2));
 
   // NOTE: FROM_EMAIL is 'onboarding@resend.dev', Resend's sandbox sender.
   // In sandbox mode Resend can only deliver to the account owner's verified
@@ -495,10 +496,12 @@ async function sendEmails(booking) {
   }
 
   console.log(`[Email] job summary: ${jobs.map(j => j.label + '→' + j.payload.to).join(', ')}`);
+  console.log('[Email] jobs to send:', JSON.stringify(jobs.map(j => ({ label: j.label, to: j.payload.to, subject: j.payload.subject })), null, 2));
 
   for (const job of jobs) {
     try {
       // Resend SDK returns { data, error } — does NOT throw on API errors
+      console.log(`[Email] SENDING NOW — label: ${job.label}, to: ${JSON.stringify(job.payload.to)}, from: ${job.payload.from}`);
       const { data, error } = await resend.emails.send(job.payload);
       if (error) {
         console.error(`[Email] ${job.label} failed (API error):`, JSON.stringify(error));
@@ -670,6 +673,7 @@ app.post('/api/chat', async (req, res) => {
 app.post('/api/bookings', async (req, res) => {
   try {
     const booking = req.body;
+    console.log('[Booking] raw body received:', JSON.stringify(booking, null, 2));
     if (!booking.name || !booking.phone || !booking.vehicle) {
       return res.status(400).json({ error: 'Missing required fields: name, phone, vehicle' });
     }
