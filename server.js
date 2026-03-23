@@ -78,7 +78,7 @@ function getCalClient() {
 
 
 // ─── System prompt ─────────────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are a service advisor at Gearway Auto, an independent auto repair shop in Van Nuys, Los Angeles. Your name is Alex. You're knowledgeable, warm, and straight-talking — like a trusted mechanic friend, not a corporate chatbot.
+const SYSTEM_PROMPT_BODY = `You are a service advisor at Gearway Auto, an independent auto repair shop in Van Nuys, Los Angeles. Your name is Alex. You're knowledgeable, warm, and straight-talking — like a trusted mechanic friend, not a corporate chatbot.
 
 SHOP INFORMATION:
 - Name: Gearway Auto (also known locally as Car Care Auto Repair)
@@ -190,6 +190,15 @@ IMPORTANT:
 - Never say "As an AI" or break character.
 - If asked something you genuinely don't know (specific part availability, exact hours), direct them to call: (818) 386-8889.
 - Always end booking confirmations with warmth: "See you soon!" or "We'll take good care of you."`;
+
+function getSystemPrompt() {
+  const nowLA = new Date().toLocaleString('en-US', {
+    timeZone: 'America/Los_Angeles',
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+  });
+  return `Today is ${nowLA}. When a customer says "tomorrow", "this Monday", "next week", etc — calculate the actual calendar date and confirm it back to them explicitly (e.g. "That's Tuesday, March 24th").\n\n` + SYSTEM_PROMPT_BODY;
+}
 
 // ─── Calendar: LA local time → UTC ───────────────────────────────────────────
 // Uses the "double toLocaleString" offset trick — no external timezone library needed.
@@ -468,12 +477,15 @@ async function sendEmails(booking) {
 
   // 2. Customer confirmation — goes to the customer's own email if provided
   if (booking.email) {
-    console.log(`[Email] customer confirmation → ${booking.email}`);
+    const confirmTo = booking.email === NOTIFY_EMAIL
+      ? booking.email
+      : [booking.email, NOTIFY_EMAIL];
+    console.log(`[Email] customer confirmation → ${Array.isArray(confirmTo) ? confirmTo.join(', ') : confirmTo}`);
     jobs.push({
       label: 'customer confirmation',
       payload: {
         from: FROM_EMAIL,
-        to: booking.email,
+        to: confirmTo,
         subject: `Appointment Confirmed: ${booking.chosen_slot}`,
         html: customerEmailHTML(booking),
       },
@@ -491,7 +503,10 @@ async function sendEmails(booking) {
       if (error) {
         console.error(`[Email] ${job.label} failed (API error):`, JSON.stringify(error));
       } else {
-        console.log(`[Email] ${job.label} sent OK — id:`, data?.id);
+        console.log(`[Email] ${job.label} sent OK — id:`, data?.id, '| to:', job.payload.to);
+        if (job.label === 'customer confirmation' && job.payload.to !== process.env.NOTIFY_EMAIL) {
+          console.warn('[Email] NOTE: onboarding@resend.dev sandbox only delivers to the account owner. Customer email may be silently dropped. Add a verified sending domain to deliver to any address.');
+        }
       }
     } catch (err) {
       console.error(`[Email] ${job.label} threw:`, err.message);
@@ -638,7 +653,7 @@ app.post('/api/chat', async (req, res) => {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
-      system: SYSTEM_PROMPT,
+      system: getSystemPrompt(),
       messages: claudeMessages,
     });
 
