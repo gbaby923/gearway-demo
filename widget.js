@@ -486,16 +486,19 @@
     /* Mobile */
     @media (max-width: 480px) {
       #gw-widget-panel {
-        bottom: 10px;
-        right: 10px;
-        left: 10px;
-        width: auto;
-        height: auto;
-        max-height: calc(100vh - 90px);
-        border-radius: 16px;
-        border: 1px solid #2a2a2a;
+        top: 0;
+        bottom: 0;
+        right: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        max-height: 100%;
+        border-radius: 0;
+        border: none;
       }
       #gw-widget-btn { bottom: 16px; right: 16px; }
+      #gw-input { font-size: 16px; }
+      body.gw-panel-open { overflow: hidden; touch-action: none; }
     }
   `;
 
@@ -644,17 +647,28 @@
   }
 
   // ─── Toggle ────────────────────────────────────────────────────────────────────
+  function isMobile() { return window.innerWidth <= 480; }
+
   function togglePanel() {
     state.open = !state.open;
     if (state.open) {
       panel.classList.add('gw-open');
       hideNotifDot();
       setButtonIcon('close');
+      if (isMobile()) {
+        document.body.classList.add('gw-panel-open');
+        btn.style.display = 'none';
+      }
       if (!state.greeted) { state.greeted = true; setTimeout(sendGreeting, 300); }
-      setTimeout(function () { inputEl.focus(); }, 350);
+      // Focus immediately (no timeout) so iOS keyboard opens within the user gesture
+      inputEl.focus();
     } else {
       panel.classList.remove('gw-open');
       setButtonIcon('chat');
+      if (isMobile()) {
+        document.body.classList.remove('gw-panel-open');
+        btn.style.display = '';
+      }
     }
   }
 
