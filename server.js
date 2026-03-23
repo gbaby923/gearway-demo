@@ -149,15 +149,15 @@ After gathering enough info (usually 3–5 exchanges), give a helpful assessment
 - Then offer to book a diagnostic appointment.
 
 BOOKING FLOW:
-When a customer wants to book, collect this info conversationally (one question at a time):
+When a customer wants to book, collect info in this exact order — one question at a time:
 1. First and last name
 2. Best phone number
-3. Email address (optional — say "optional")
-4. Year, make, model, mileage (if not already collected)
-5. What service or issue they're coming in for
-6. Ask them their preferred day/time — if they mention a specific day and time (e.g. "Tuesday at 2pm", "this Thursday at 10am"), capture it exactly as stated. Do not round or generalize to just a day or time-of-day range if the customer gave a precise time.
+3. Email address (optional — say "optional, but we'll send a confirmation if you share it")
+4. Year, make, model, and mileage (if not already collected during diagnosis)
+5. What service or issue they're coming in for (if not already clear)
+6. ONLY AFTER steps 1–5 are complete, ask: "What day and time works best for you?"
 
-Once you have all required info (name, phone, vehicle, service) and have asked about their preferred timing, confirm everything back to the customer. If they confirm, output a booking summary in this EXACT format at the END of your response (after your conversational text):
+When the customer gives a preferred time, output a booking summary in this EXACT format at the END of your response (after your conversational text):
 
 \`\`\`booking
 {
@@ -166,12 +166,12 @@ Once you have all required info (name, phone, vehicle, service) and have asked a
   "email": "...",
   "vehicle": "YEAR MAKE MODEL (Xk miles)",
   "service": "...",
-  "preferred_time": "e.g. Tuesday at 2pm / Wednesday morning / any afternoon — if the customer stated a specific time, capture it exactly as they said it (e.g. \"Tuesday at 2pm\", \"this Thursday at 10am\")",
+  "preferred_time": "capture exactly as stated — e.g. Tuesday at 2pm, this Thursday at 10am, Wednesday morning",
   "notes": "..."
 }
 \`\`\`
 
-After outputting the booking JSON, the system will automatically show available appointment times for the customer to choose from. You do NOT need to suggest specific times. If the customer mentioned a specific time, the system will check that exact slot first and inform them whether it's available.
+After outputting the booking JSON, the system will immediately check that time on the calendar and show the customer what's available. You do NOT need to suggest times or confirm availability — the system handles that. Do NOT output the booking JSON before the customer gives you their preferred time.
 
 UPSELL RECOMMENDATIONS (always natural, never pushy):
 - Brakes → "While we have it up, worth checking rotors too — if they're scored it's easier to do both at once."
@@ -308,7 +308,9 @@ async function findAvailableSlots(preferred) {
       busy = fb.data.calendars[CALENDAR_ID]?.busy || [];
       console.log(`[Calendar] freebusy ok — ${busy.length} busy block(s)`);
     } catch (err) {
-      console.error('[Calendar] freebusy error:', err.message);
+      const detail = err.response?.data?.error || err.response?.data || err.message;
+      console.error('[Calendar] freebusy FAILED — status:', err.response?.status, 'detail:', JSON.stringify(detail));
+      console.error('[Calendar] freebusy — proceeding with empty busy list; slots may show as available even if booked');
     }
   }
 
@@ -331,9 +333,8 @@ async function findAvailableSlots(preferred) {
 
   if (prefMatches.length > 0) {
     const first = prefMatches[0];
-    const others = available.filter(s => s !== first).slice(0, 2);
     return {
-      slots: [first, ...others].map(toResult),
+      slots: [first].map(toResult),
       preferredAvailable: true,
       preferredLabel: first.label,
     };
@@ -480,6 +481,8 @@ async function sendEmails(booking) {
   } else {
     console.log('[Email] customer confirmation → no customer email, skipping');
   }
+
+  console.log(`[Email] job summary: ${jobs.map(j => j.label + '→' + j.payload.to).join(', ')}`);
 
   for (const job of jobs) {
     try {

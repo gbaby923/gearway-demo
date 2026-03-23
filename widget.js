@@ -260,6 +260,60 @@
       color: #fff;
     }
 
+    /* Confirm card — pre-booking summary shown before committing */
+    .gw-confirm-card {
+      background: #0a1a12;
+      border: 1px solid #1a4a2a;
+      border-radius: 12px;
+      padding: 14px;
+      align-self: flex-start;
+      max-width: 94%;
+      font-size: 13px;
+    }
+    .gw-confirm-card h4 {
+      color: #6ee7b7;
+      margin: 0 0 10px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .gw-confirm-card .gw-booking-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 5px;
+      color: #e0e0e0;
+    }
+    .gw-confirm-card .gw-booking-label {
+      color: #555;
+      flex-shrink: 0;
+      min-width: 74px;
+      font-size: 12px;
+    }
+    .gw-confirm-card .gw-booking-val { font-size: 13px; }
+    .gw-confirm-card .gw-booking-divider {
+      height: 1px;
+      background: #1a4a2a;
+      margin: 8px 0;
+    }
+    .gw-confirm-btn {
+      display: block;
+      width: 100%;
+      margin-top: 12px;
+      background: #6ee7b7;
+      border: none;
+      color: #0a0a0a;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s;
+    }
+    .gw-confirm-btn:hover { background: #4dd4a0; }
+    .gw-confirm-btn:disabled { background: #2a4a3a; color: #555; cursor: not-allowed; }
+
     /* Typing indicator */
     .gw-typing {
       display: flex;
@@ -716,6 +770,57 @@
     scrollToBottom();
   }
 
+  function appendConfirmCard(booking, slot) {
+    var payload = Object.assign({}, booking, {
+      chosen_slot: slot.label,
+      slot_start: slot.start,
+      slot_end: slot.end,
+    });
+    var div = document.createElement('div');
+    div.className = 'gw-confirm-card';
+    div.innerHTML =
+      '<h4>Confirm your appointment</h4>' +
+      '<div class="gw-booking-row"><span class="gw-booking-label">When</span><span class="gw-booking-val"><strong>' + escHtml(slot.label) + '</strong></span></div>' +
+      '<div class="gw-booking-divider"></div>' +
+      '<div class="gw-booking-row"><span class="gw-booking-label">Name</span><span class="gw-booking-val">' + escHtml(booking.name) + '</span></div>' +
+      '<div class="gw-booking-row"><span class="gw-booking-label">Phone</span><span class="gw-booking-val">' + escHtml(booking.phone) + '</span></div>' +
+      (booking.email ? '<div class="gw-booking-row"><span class="gw-booking-label">Email</span><span class="gw-booking-val">' + escHtml(booking.email) + '</span></div>' : '') +
+      '<div class="gw-booking-row"><span class="gw-booking-label">Vehicle</span><span class="gw-booking-val">' + escHtml(booking.vehicle) + '</span></div>' +
+      '<div class="gw-booking-row"><span class="gw-booking-label">Service</span><span class="gw-booking-val">' + escHtml(booking.service) + '</span></div>' +
+      '<button class="gw-confirm-btn" id="gw-confirm-btn">Confirm Appointment</button>';
+
+    div.querySelector('#gw-confirm-btn').addEventListener('click', function () {
+      this.disabled = true;
+      this.textContent = 'Booking…';
+      handleConfirmBooking(payload, div);
+    });
+    messagesEl.appendChild(div);
+    scrollToBottom();
+  }
+
+  function handleConfirmBooking(payload, cardEl) {
+    showTyping();
+    fetchWithTimeout(CONFIG.bookingEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }, 25000)
+      .then(function (r) { return r.json(); })
+      .then(function () {
+        removeTyping();
+        if (cardEl && cardEl.parentNode) cardEl.remove();
+        appendBookingCard(payload);
+        state.messages.push({ role: 'user', content: 'My appointment is confirmed for ' + payload.chosen_slot + '. Thanks!' });
+        sendToAPI();
+      })
+      .catch(function (err) {
+        removeTyping();
+        console.error('[Confirm]', err);
+        if (cardEl) { var btn = cardEl.querySelector('.gw-confirm-btn'); if (btn) { btn.disabled = false; btn.textContent = 'Confirm Appointment'; } }
+        appendBotMessage("Something went wrong confirming your booking. Give us a call at **(818) 386-8889** and we'll sort it out.");
+      });
+  }
+
   function appendSlotsCard(slots, headerText) {
     var div = document.createElement('div');
     div.className = 'gw-slots-card';
@@ -877,15 +982,16 @@
           return;
         }
 
-        var header;
         if (data.preferredAvailable === true) {
-          header = 'Good news — ' + booking.preferred_time + ' is open! Here it is plus a couple of alternatives:';
+          // Preferred slot is free — skip slot-picking, go straight to confirm card
+          appendBotMessage('Good news — ' + booking.preferred_time + ' is available! Here\'s a summary before we lock it in:');
+          appendConfirmCard(state.pendingBooking, data.slots[0]);
+          state.pendingBooking = null;
         } else if (data.preferredAvailable === false) {
-          header = 'Unfortunately, ' + booking.preferred_time + ' is already booked. Here are the next available times we have:';
+          appendSlotsCard(data.slots, 'Unfortunately, ' + booking.preferred_time + ' is already booked. Here are the next available times we have:');
         } else {
-          header = 'Choose a time';
+          appendSlotsCard(data.slots, 'Choose a time');
         }
-        appendSlotsCard(data.slots, header);
       })
       .catch(function (err) {
         console.error('[Slots]', err);
@@ -902,37 +1008,9 @@
     appendUserMessage(slot.label);
     showTyping();
 
-    // Build the full booking payload
-    var payload = Object.assign({}, booking, {
-      chosen_slot: slot.label,
-      slot_start: slot.start,
-      slot_end: slot.end,
-    });
-
-    // Confirm and book
-    fetchWithTimeout(CONFIG.bookingEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }, 25000)
-      .then(function (r) { return r.json(); })
-      .then(function () {
-        removeTyping();
-        appendBookingCard(payload);
-        // Warm closing from Claude
-        var closingMsg = {
-          role: 'user',
-          content: 'My appointment is confirmed for ' + slot.label + '. Thanks!',
-        };
-        state.messages.push(closingMsg);
-        sendToAPI();
-      })
-      .catch(function (err) {
-        removeTyping();
-        console.error('[Booking]', err);
-        appendBookingCard(payload); // still show the card
-        appendBotMessage("Got you booked in! A confirmation has been sent. See you soon!");
-      });
+    // Show confirm card — user clicks Confirm to actually book
+    removeTyping();
+    appendConfirmCard(booking, slot);
   }
 
   // ─── Context-aware chips ───────────────────────────────────────────────────────
