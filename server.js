@@ -155,7 +155,7 @@ When a customer wants to book, collect this info conversationally (one question 
 3. Email address (optional — say "optional")
 4. Year, make, model, mileage (if not already collected)
 5. What service or issue they're coming in for
-6. Ask them their preferred day/time — morning or afternoon, any day constraints?
+6. Ask them their preferred day/time — if they mention a specific day and time (e.g. "Tuesday at 2pm", "this Thursday at 10am"), capture it exactly as stated. Do not round or generalize to just a day or time-of-day range if the customer gave a precise time.
 
 Once you have all required info (name, phone, vehicle, service) and have asked about their preferred timing, confirm everything back to the customer. If they confirm, output a booking summary in this EXACT format at the END of your response (after your conversational text):
 
@@ -166,12 +166,12 @@ Once you have all required info (name, phone, vehicle, service) and have asked a
   "email": "...",
   "vehicle": "YEAR MAKE MODEL (Xk miles)",
   "service": "...",
-  "preferred_time": "e.g. Tuesday at 2pm / Wednesday morning / any afternoon",
+  "preferred_time": "e.g. Tuesday at 2pm / Wednesday morning / any afternoon — if the customer stated a specific time, capture it exactly as they said it (e.g. \"Tuesday at 2pm\", \"this Thursday at 10am\")",
   "notes": "..."
 }
 \`\`\`
 
-After outputting the booking JSON, the system will automatically show available appointment times for the customer to choose from. You do NOT need to suggest specific times.
+After outputting the booking JSON, the system will automatically show available appointment times for the customer to choose from. You do NOT need to suggest specific times. If the customer mentioned a specific time, the system will check that exact slot first and inform them whether it's available.
 
 UPSELL RECOMMENDATIONS (always natural, never pushy):
 - Brakes → "While we have it up, worth checking rotors too — if they're scored it's easier to do both at once."
@@ -443,28 +443,43 @@ async function sendEmails(booking) {
     return;
   }
 
-  console.log('[Email] sending to:', NOTIFY_EMAIL);
+  // NOTE: FROM_EMAIL is 'onboarding@resend.dev', Resend's sandbox sender.
+  // In sandbox mode Resend can only deliver to the account owner's verified
+  // address (gabriel.ruiz@mount-studio.com). Emails routed to booking.email
+  // will be accepted by the API but silently dropped unless that address is
+  // also verified in the Resend dashboard, or a custom sending domain is
+  // configured. The routing logic below is correct for production — just
+  // swap in a verified custom domain as FROM_EMAIL when ready.
 
-  const jobs = [
-    {
-      label: 'shop notification',
-      payload: {
-        from: FROM_EMAIL,
-        to: NOTIFY_EMAIL,
-        subject: `New Booking: ${booking.name} — ${booking.service}`,
-        html: shopEmailHTML(booking),
-      },
+  const jobs = [];
+
+  // 1. Shop notification — always goes to NOTIFY_EMAIL
+  console.log(`[Email] shop notification → ${NOTIFY_EMAIL}`);
+  jobs.push({
+    label: 'shop notification',
+    payload: {
+      from: FROM_EMAIL,
+      to: NOTIFY_EMAIL,
+      subject: `New Booking: ${booking.name} — ${booking.service}`,
+      html: shopEmailHTML(booking),
     },
-    {
+  });
+
+  // 2. Customer confirmation — goes to the customer's own email if provided
+  if (booking.email) {
+    console.log(`[Email] customer confirmation → ${booking.email}`);
+    jobs.push({
       label: 'customer confirmation',
       payload: {
         from: FROM_EMAIL,
-        to: NOTIFY_EMAIL, // demo: both go to shop; production: use booking.email
+        to: booking.email,
         subject: `Appointment Confirmed: ${booking.chosen_slot}`,
         html: customerEmailHTML(booking),
       },
-    },
-  ];
+    });
+  } else {
+    console.log('[Email] customer confirmation → no customer email, skipping');
+  }
 
   for (const job of jobs) {
     try {

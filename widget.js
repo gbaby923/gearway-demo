@@ -858,7 +858,9 @@
   // ─── Slot flow ─────────────────────────────────────────────────────────────────
   function fetchSlots(booking) {
     state.pendingBooking = booking;
-    var checkingEl = appendBotMessage('Give me one moment while I check availability…');
+    var checkingEl = appendBotMessage(booking.preferred_time
+      ? 'Give me one moment while I check ' + booking.preferred_time + ' for you…'
+      : 'Give me one moment while I check availability…');
 
     var url = CONFIG.slotsEndpoint;
     if (booking.preferred_time) {
@@ -877,9 +879,9 @@
 
         var header;
         if (data.preferredAvailable === true) {
-          header = "That time works! Here it is plus a couple of alternatives:";
+          header = 'Good news — ' + booking.preferred_time + ' is open! Here it is plus a couple of alternatives:';
         } else if (data.preferredAvailable === false) {
-          header = "That slot's taken — here are 3 open times nearby:";
+          header = 'Unfortunately, ' + booking.preferred_time + ' is already booked. Here are the next available times we have:';
         } else {
           header = 'Choose a time';
         }
